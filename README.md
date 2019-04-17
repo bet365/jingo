@@ -45,8 +45,8 @@ The usage is similar to that of the stdlib `json.Marshal`, but we do most of our
 
 The encoders you have available to you are 
 
-* `json.StructEncoder`
-* `json.SliceEncoder`
+* `jingo.StructEncoder`
+* `jingo.SliceEncoder`
 
 They both reference each other and they work in exactly the same way. You'll see, like the stdlib `encode/json`, there is very little wire-up involved. 
 
