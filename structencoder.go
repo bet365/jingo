@@ -267,7 +267,6 @@ func (e *StructEncoder) ptrstringval(conv func(unsafe.Pointer, *Buffer)) {
 	e.flunk() // flush any chunk data we've buffered
 
 	// avoids allocs at runtime
-	quote := []byte(`"`)
 	null := []byte("null")
 
 	f := e.f
@@ -280,9 +279,9 @@ func (e *StructEncoder) ptrstringval(conv func(unsafe.Pointer, *Buffer)) {
 		}
 
 		// quotes need to be at runtime here because we don't know if we're going to have to null the field
-		w.Write(quote)
+		w.WriteByte('"')
 		conv(p, w)
-		w.Write(quote)
+		w.WriteByte('"')
 	})
 }
 

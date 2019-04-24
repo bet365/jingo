@@ -23,7 +23,8 @@ type all struct {
 	PropFloat64 float64 `json:"propFloat64,stringer"`
 	PropString  string  `json:"propString"`
 	PropStruct  struct {
-		PropNames []string `json:"propName"`
+		PropNames []string  `json:"propName"`
+		PropPs    []*string `json:"ps"`
 	} `json:"propStruct"`
 }
 
@@ -31,6 +32,8 @@ func ExampleJsonAll() {
 
 	enc := NewStructEncoder(all{})
 	b := NewBufferFromPool()
+
+	s := "test pointer string"
 	enc.Marshal(&all{
 		PropBool:    false,
 		PropInt:     1234567878910111212,
@@ -47,51 +50,56 @@ func ExampleJsonAll() {
 		PropFloat64: 2799999999888.28293031999999,
 		PropString:  "thirty two thirty four",
 		PropStruct: struct {
-			PropNames []string `json:"propName"`
+			PropNames []string  `json:"propName"`
+			PropPs    []*string `json:"ps"`
 		}{
 			PropNames: []string{"a name", "another name", "another"},
+			PropPs:    []*string{&s, nil, &s},
 		},
 	}, b)
 
 	fmt.Println(b.String())
 
 	// Output:
-	// {"propBool":false,"propInt":1234567878910111212,"propInt8":123,"propInt16":12349,"propInt32":1234567891,"propInt64":1234567878910111213,"propUint":12345678789101112138,"propUint8":255,"propUint16":12345,"propUint32":1234567891,"propUint64":12345678789101112139,"propFloat32":21.232426,"propFloat64":2799999999888.2827,"propString":"thirty two thirty four","propStruct":{"propName":["a name","another name","another"]}}
+	// {"propBool":false,"propInt":1234567878910111212,"propInt8":123,"propInt16":12349,"propInt32":1234567891,"propInt64":1234567878910111213,"propUint":12345678789101112138,"propUint8":255,"propUint16":12345,"propUint32":1234567891,"propUint64":12345678789101112139,"propFloat32":21.232426,"propFloat64":2799999999888.2827,"propString":"thirty two thirty four","propStruct":{"propName":["a name","another name","another"],"ps":["test pointer string",null,"test pointer string"]}}
 
 }
 
 //
 
-var fakeType = SmallPayload{}
-var fake = NewSmallPayload()
+// var fakeType = SmallPayload{}
+// var fake = NewSmallPayload()
 
 // var fakeType = LargePayload{}
 // var fake = NewLargePayload()
 
 //
 //
-// var fakeType = all{}
-// var fake = &all{
-// 	PropBool:    false,
-// 	PropInt:     1234567878910111212,
-// 	PropInt8:    123,
-// 	PropInt16:   12349,
-// 	PropInt32:   1234567891,
-// 	PropInt64:   1234567878910111213,
-// 	PropUint:    12345678789101112138,
-// 	PropUint8:   255,
-// 	PropUint16:  12345,
-// 	PropUint32:  1234567891,
-// 	PropUint64:  12345678789101112139,
-// 	PropFloat32: 21.232426,
-// 	PropFloat64: 2799999999888.28293031999999,
-// 	PropString:  "thirty two thirty four",
-// 	PropStruct: struct {
-// 		PropNames []string `json:"propName"`
-// 	}{
-// 		PropNames: []string{"a name", "another name", "another"},
-// 	},
-// }
+var s = "test pointer string b"
+var fakeType = all{}
+var fake = &all{
+	PropBool:    false,
+	PropInt:     1234567878910111212,
+	PropInt8:    123,
+	PropInt16:   12349,
+	PropInt32:   1234567891,
+	PropInt64:   1234567878910111213,
+	PropUint:    12345678789101112138,
+	PropUint8:   255,
+	PropUint16:  12345,
+	PropUint32:  1234567891,
+	PropUint64:  12345678789101112139,
+	PropFloat32: 21.232426,
+	PropFloat64: 2799999999888.28293031999999,
+	PropString:  "thirty two thirty four",
+	PropStruct: struct {
+		PropNames []string  `json:"propName"`
+		PropPs    []*string `json:"ps"`
+	}{
+		PropNames: []string{"a name", "another name", "another"},
+		PropPs:    []*string{&s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s},
+	},
+}
 
 func BenchmarkJson(b *testing.B) {
 
