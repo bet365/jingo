@@ -97,8 +97,9 @@ Buffer is a simple custom buffer type which complies with `io.Writer`. Its main 
 There are a couple of subtle ways you can configure the encoders. 
 
 * You can specify a default capacity for buffer using `NewBufferFromPoolWithCap(int)*Buffer`
-* It supports the same `json:"tag,options"` syntax as the stdlib, but not the same options. Currently the only option you have is
+* It supports the same `json:"tag,options"` syntax as the stdlib, but not the same options. Currently the options you have are
     - `,stringer`, which instead of the standard serialization method for a given type, nominates that its `.String()` function is invoked instead to provide the serialization value.
+    - `,raw`, which allows byteslice-like items (like `[]byte` and `string`) to be written to the buffer directly with no conversion, quoting or otherwise. `nil` or empty fields annotated as `raw` will output `null`. 
 
 ## How does it work
 
