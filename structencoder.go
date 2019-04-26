@@ -60,8 +60,9 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 		}
 		e.chunk(`"` + tag + `":`)
 
+		switch {
 		/// support calling .String() when the 'stringer' option is passed
-		if opts.Contains("stringer") && reflect.ValueOf(e.t).Field(e.i).MethodByName("String").Kind() != reflect.Invalid {
+		case opts.Contains("stringer") && reflect.ValueOf(e.t).Field(e.i).MethodByName("String").Kind() != reflect.Invalid:
 
 			e.chunk(`"`)
 			e.flunk()
@@ -76,6 +77,24 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 				w.Write(*(*[]byte)(unsafe.Pointer(&sr)))
 			})
 			e.chunk(`"`)
+			continue
+
+		/// support writing byteslice-like items using 'raw' option.
+		case opts.Contains("raw"):
+			conv := func(v unsafe.Pointer, w *Buffer) {
+				s := *(*[]byte)(v)
+				if len(s) == 0 {
+					w.Write(null)
+					return
+				}
+				w.Write(s)
+			}
+
+			if e.f.Type.Kind() == reflect.Ptr {
+				e.ptrval(conv)
+			} else {
+				e.val(conv)
+			}
 			continue
 		}
 

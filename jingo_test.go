@@ -65,6 +65,29 @@ func ExampleJsonAll() {
 
 }
 
+func ExampleRaw() {
+
+	type testStruct2 struct {
+		Raw  []byte `json:"raw,raw"`
+		Raw2 []byte `json:"c,raw"`
+		Raw3 int    `json:"b,raw"`
+	}
+
+	var enc = NewStructEncoder(testStruct2{})
+
+	b := NewBufferFromPool()
+	v := testStruct2{
+		Raw:  []byte(`{"mapKey1":1,"mapKey2":2}`),
+		Raw3: 1,
+	}
+
+	enc.Marshal(&v, b)
+	fmt.Println(b.String())
+
+	// Output:
+	// {"raw":{"mapKey1":1,"mapKey2":2},"c":null,"b":null}
+}
+
 func Test_NilStruct(t *testing.T) {
 	type testStruct1 struct {
 		StrVal string `json:"str1"`
@@ -86,7 +109,6 @@ func Test_NilStruct(t *testing.T) {
 	if resultJSON != wantJSON {
 		t.Errorf("Test_NilStruct Failed: want JSON: " + wantJSON + " got JSON:" + resultJSON)
 	}
-	buf.ReturnToPool()
 }
 
 //
