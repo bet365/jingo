@@ -215,6 +215,10 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		f := e.f
 		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(*(*uintptr)(unsafe.Pointer(uintptr(v) + f.Offset)))
+			if em == unsafe.Pointer(nil) {
+				w.Write(null)
+				return
+			}
 			enc.Marshal(em, w)
 		})
 

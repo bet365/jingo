@@ -65,6 +65,30 @@ func ExampleJsonAll() {
 
 }
 
+func Test_NilStruct(t *testing.T) {
+	type testStruct1 struct {
+		StrVal string `json:"str1"`
+		IntVal int    `json:"int1"`
+	}
+	type testStruct0 struct {
+		StructPtr *testStruct1 `json:"structPtr"`
+	}
+
+	wantJSON := "{\"structPtr\":null}"
+
+	var enc = NewStructEncoder(testStruct0{})
+
+	buf := NewBufferFromPool()
+	v := testStruct0{}
+	enc.Marshal(&v, buf)
+
+	resultJSON := buf.String()
+	if resultJSON != wantJSON {
+		t.Errorf("Test_NilStruct Failed: want JSON: " + wantJSON + " got JSON:" + resultJSON)
+	}
+	buf.ReturnToPool()
+}
+
 //
 
 // var fakeType = SmallPayload{}
