@@ -34,8 +34,9 @@ func ptrBoolToBuf(v unsafe.Pointer, b *Buffer) {
 	r := *(*bool)(v)
 	if r {
 		b.Write(btrue)
+	} else {
+		b.Write(bfalse)
 	}
-	b.Write(bfalse)
 }
 
 func ptrIntToBuf(v unsafe.Pointer, b *Buffer) {
