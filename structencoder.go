@@ -240,18 +240,10 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 			}
 			enc.Marshal(em, w)
 		})
+	default:
+		// not support reflect.kind,panic
+		panic(fmt.Sprintf("%s: kind:%s,name:%s", "unsupported type:", e.f.Type.Kind(), e.f.Name))
 
-	case reflect.Invalid,
-		reflect.Map,
-		reflect.Interface,
-		reflect.Complex64,
-		reflect.Complex128,
-		reflect.Chan,
-		reflect.Func,
-		reflect.Uintptr,
-		reflect.UnsafePointer:
-		// no
-		panic(fmt.Sprint("unsupported type ", e.f.Type.Kind(), e.f.Name))
 	}
 }
 
