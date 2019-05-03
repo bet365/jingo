@@ -279,6 +279,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		reflect.Complex128,
 		reflect.Chan,
 		reflect.Func,
+		reflect.Uintptr,
 		reflect.UnsafePointer:
 		// no
 		panic(fmt.Sprint("unsupported type ", e.f.Type.Kind(), e.f.Name))
