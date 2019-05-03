@@ -100,6 +100,7 @@ There are a couple of subtle ways you can configure the encoders.
 * It supports the same `json:"tag,options"` syntax as the stdlib, but not the same options. Currently the options you have are
     - `,stringer`, which instead of the standard serialization method for a given type, nominates that its `.String()` function is invoked instead to provide the serialization value.
     - `,raw`, which allows byteslice-like items (like `[]byte` and `string`) to be written to the buffer directly with no conversion, quoting or otherwise. `nil` or empty fields annotated as `raw` will output `null`. 
+    - `.encoder` which instead of the standard serialization method for a given type, nominates that its `.JSONEncode(*jingo.Buffer)` function is invoked instead. From there you can manually write to the buffer for that particular field. The interface you need to comply with is exported as `jingo.JSONEncoder`. 
 
 ## How does it work
 

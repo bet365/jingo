@@ -26,6 +26,29 @@ type all struct {
 		PropNames []string  `json:"propName"`
 		PropPs    []*string `json:"ps"`
 	} `json:"propStruct"`
+	PropEncode     encode0  `json:"propEncode,encoder"`
+	PropEncodeP    *encode0 `json:"propEncodeP,encoder"`
+	PropEncodenilP *encode0 `json:"propEncodenilP,encoder"`
+	PropEncodeS    encode1  `json:"propEncodeS,encoder"`
+}
+
+type encode0 struct {
+	val byte
+}
+
+func (e *encode0) JSONEncode(w *Buffer) {
+	w.WriteByte(e.val)
+}
+
+type encode1 []encode0
+
+func (e *encode1) JSONEncode(w *Buffer) {
+
+	w.WriteByte('1')
+
+	for _, v := range *e {
+		w.WriteByte(v.val)
+	}
 }
 
 func ExampleJsonAll() {
@@ -56,13 +79,15 @@ func ExampleJsonAll() {
 			PropNames: []string{"a name", "another name", "another"},
 			PropPs:    []*string{&s, nil, &s},
 		},
+		PropEncode:  encode0{'1'},
+		PropEncodeP: &encode0{'2'},
+		PropEncodeS: encode1{encode0{'3'}, encode0{'4'}},
 	}, b)
 
 	fmt.Println(b.String())
 
 	// Output:
-	// {"propBool":false,"propInt":1234567878910111212,"propInt8":123,"propInt16":12349,"propInt32":1234567891,"propInt64":1234567878910111213,"propUint":12345678789101112138,"propUint8":255,"propUint16":12345,"propUint32":1234567891,"propUint64":12345678789101112139,"propFloat32":21.232426,"propFloat64":2799999999888.2827,"propString":"thirty two thirty four","propStruct":{"propName":["a name","another name","another"],"ps":["test pointer string",null,"test pointer string"]}}
-
+	// {"propBool":false,"propInt":1234567878910111212,"propInt8":123,"propInt16":12349,"propInt32":1234567891,"propInt64":1234567878910111213,"propUint":12345678789101112138,"propUint8":255,"propUint16":12345,"propUint32":1234567891,"propUint64":12345678789101112139,"propFloat32":21.232426,"propFloat64":2799999999888.2827,"propString":"thirty two thirty four","propStruct":{"propName":["a name","another name","another"],"ps":["test pointer string",null,"test pointer string"]},"propEncode":1,"propEncodeP":2,"propEncodenilP":null,"propEncodeS":134}
 }
 
 func ExampleRaw() {

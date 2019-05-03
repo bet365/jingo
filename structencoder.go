@@ -79,6 +79,35 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 			e.chunk(`"`)
 			continue
 
+		/// support calling .JSONEncode(*Buffer) when the 'encoder' option is passed
+		case opts.Contains("encoder"):
+
+			e.flunk()
+			t := reflect.ValueOf(e.t).Field(e.i).Type()
+			f := e.f
+
+			if e.f.Type.Kind() == reflect.Ptr {
+				e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+					p := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(uintptr(v) + f.Offset)))
+					e, ok := reflect.NewAt(t.Elem(), p).Interface().(JSONEncoder)
+					if !ok || p == unsafe.Pointer(nil) {
+						w.Write(null)
+						return
+					}
+					e.JSONEncode(w)
+				})
+			} else {
+				e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+					e, ok := reflect.NewAt(t, unsafe.Pointer(uintptr(v)+f.Offset)).Interface().(JSONEncoder)
+					if !ok {
+						w.Write(null)
+						return
+					}
+					e.JSONEncode(w)
+				})
+			}
+			continue
+
 		/// support writing byteslice-like items using 'raw' option.
 		case opts.Contains("raw"):
 			conv := func(v unsafe.Pointer, w *Buffer) {
@@ -215,31 +244,33 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		// create an instruction for the field name (as per val)
 		e.flunk()
 
-		if e.f.Type.Kind() != reflect.Ptr {
-			// build a new StructEncoder for the type
-			enc := NewStructEncoder(reflect.ValueOf(e.t).Field(e.i).Interface())
-			// now create another instruction which calls marshal on the struct, passing our writer
+		if e.f.Type.Kind() == reflect.Ptr {
+
+			/// now cater for it being a pointer to a struct
+			var inf = reflect.New(reflect.TypeOf(e.t).Field(e.i).Type.Elem()).Elem().Interface()
+			enc := NewStructEncoder(inf)
+			// now create an instruction to marshal the field
 			f := e.f
 			e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
-				var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
+				var em interface{} = unsafe.Pointer(*(*uintptr)(unsafe.Pointer(uintptr(v) + f.Offset)))
+				if em == unsafe.Pointer(nil) {
+					w.Write(null)
+					return
+				}
 				enc.Marshal(em, w)
 			})
 			return
 		}
 
-		/// now cater for it being a pointer to a struct
-		var inf = reflect.New(reflect.TypeOf(e.t).Field(e.i).Type.Elem()).Elem().Interface()
-		enc := NewStructEncoder(inf)
-		// now create an instruction to marshal the field
+		// build a new StructEncoder for the type
+		enc := NewStructEncoder(reflect.ValueOf(e.t).Field(e.i).Interface())
+		// now create another instruction which calls marshal on the struct, passing our writer
 		f := e.f
 		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
-			var em interface{} = unsafe.Pointer(*(*uintptr)(unsafe.Pointer(uintptr(v) + f.Offset)))
-			if em == unsafe.Pointer(nil) {
-				w.Write(null)
-				return
-			}
+			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
 			enc.Marshal(em, w)
 		})
+		return
 
 	case reflect.Invalid,
 		reflect.Map,
@@ -306,6 +337,12 @@ func (e *StructEncoder) ptrstringval(conv func(unsafe.Pointer, *Buffer)) {
 		conv(p, w)
 		w.WriteByte('"')
 	})
+}
+
+// JSONEncoder works with the `.encoder` option. Fields can implement this to encode their own JSON string straight
+// into the working buffer. This can be useful if you're working with interface fields at runtime.
+type JSONEncoder interface {
+	JSONEncode(*Buffer)
 }
 
 // tagOptions is the string following a comma in a struct field's "json"
