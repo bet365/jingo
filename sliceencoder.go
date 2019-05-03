@@ -45,7 +45,7 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 		e.stringInstr()
 
 	case reflect.Ptr:
-		/// which pointer type
+		// which pointer type
 		switch e.tt.Elem().Elem().Kind() {
 		case reflect.Slice:
 			e.ptrSliceInstr()

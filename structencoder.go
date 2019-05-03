@@ -61,7 +61,7 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 		e.chunk(`"` + tag + `":`)
 
 		switch {
-		/// support calling .String() when the 'stringer' option is passed
+		// support calling .String() when the 'stringer' option is passed
 		case opts.Contains("stringer") && reflect.ValueOf(e.t).Field(e.i).MethodByName("String").Kind() != reflect.Invalid:
 
 			e.chunk(`"`)
@@ -79,7 +79,7 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 			e.chunk(`"`)
 			continue
 
-		/// support writing byteslice-like items using 'raw' option.
+		// support writing byteslice-like items using 'raw' option.
 		case opts.Contains("raw"):
 			conv := func(v unsafe.Pointer, w *Buffer) {
 				s := *(*[]byte)(v)
@@ -138,7 +138,7 @@ func (e *StructEncoder) flunk() {
 	})
 }
 
-/// valueInst works out the conversion function we need for `k` and creates an instruction to write it to the buffer
+// valueInst works out the conversion function we need for `k` and creates an instruction to write it to the buffer
 func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer, *Buffer))) {
 
 	switch k {
@@ -155,7 +155,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		reflect.Uint64,
 		reflect.Float32,
 		reflect.Float64:
-		/// standard print
+		// standard print
 		conv, ok := typeconv[k]
 		if !ok {
 			return
@@ -163,7 +163,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		instr(conv)
 
 	case reflect.Array:
-		/// support for primitives in arrays (proabbly need arrayencoder.go here if we want to take this further)
+		// support for primitives in arrays (proabbly need arrayencoder.go here if we want to take this further)
 		e.chunk("[")
 
 		conv, ok := typeconv[e.f.Type.Elem().Kind()]
@@ -200,7 +200,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 
 	case reflect.String:
 
-		/// for strings to be nullable they need a special instruction to write quotes conditionally.
+		// for strings to be nullable they need a special instruction to write quotes conditionally.
 		if e.f.Type.Kind() == reflect.Ptr {
 			e.ptrstringval(ptrStringToBuf)
 			return
@@ -227,7 +227,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 			return
 		}
 
-		/// now cater for it being a pointer to a struct
+		// now cater for it being a pointer to a struct
 		var inf = reflect.New(reflect.TypeOf(e.t).Field(e.i).Type.Elem()).Elem().Interface()
 		enc := NewStructEncoder(inf)
 		// now create an instruction to marshal the field
