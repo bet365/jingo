@@ -111,7 +111,48 @@ func Test_NilStruct(t *testing.T) {
 	}
 }
 
-//
+type UnicodeObject struct {
+	Chinese 		string			`json:"chinese"`
+	Emoji 			string 			`json:"emoji"`
+	Russian			string			`json:"russian"`
+}
+
+func Test_Unicode(t *testing.T) {
+	ub := UnicodeObject{
+		Chinese: 		"你好，世界",
+		Emoji:			"👋🌍😄😂👋💊🐂🍺",
+		Russian: 		"ру́сский язы́к",
+	}
+
+	wantJSON := "{\"chinese\":\"你好，世界\",\"emoji\":\"👋🌍😄😂👋💊🐂🍺\",\"russian\":\"ру́сский язы́к\"}"
+
+
+	var enc = NewStructEncoder(UnicodeObject{})
+	buf := NewBufferFromPool()
+	enc.Marshal(&ub, buf)
+	resultJSON := buf.String()
+	if resultJSON != wantJSON {
+		t.Errorf("Test_UnicodeEncode Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+	}
+
+}
+
+func BenchmarkUnicode(b *testing.B) {
+	ub := UnicodeObject{
+		Chinese: 		"你好，世界",
+		Emoji:			"👋🌍😄😂💊🐂🍺",
+		Russian: 		"ру́сский язы́к",
+	}
+
+	var enc = NewStructEncoder(UnicodeObject{})
+
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		buf := NewBufferFromPool()
+		enc.Marshal(&ub, buf)
+		buf.ReturnToPool()
+	}
+}
 
 // var fakeType = SmallPayload{}
 // var fake = NewSmallPayload()
@@ -268,3 +309,5 @@ func NewLargePayload() *LargePayload {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
