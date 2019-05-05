@@ -112,20 +112,19 @@ func Test_NilStruct(t *testing.T) {
 }
 
 type UnicodeObject struct {
-	Chinese 		string			`json:"chinese"`
-	Emoji 			string 			`json:"emoji"`
-	Russian			string			`json:"russian"`
+	Chinese string `json:"chinese"`
+	Emoji   string `json:"emoji"`
+	Russian string `json:"russian"`
 }
 
 func Test_Unicode(t *testing.T) {
 	ub := UnicodeObject{
-		Chinese: 		"你好，世界",
-		Emoji:			"👋🌍😄😂👋💊🐂🍺",
-		Russian: 		"ру́сский язы́к",
+		Chinese: "你好，世界",
+		Emoji:   "👋🌍😄😂👋💊🐂🍺",
+		Russian: "ру́сский язы́к",
 	}
 
 	wantJSON := "{\"chinese\":\"你好，世界\",\"emoji\":\"👋🌍😄😂👋💊🐂🍺\",\"russian\":\"ру́сский язы́к\"}"
-
 
 	var enc = NewStructEncoder(UnicodeObject{})
 	buf := NewBufferFromPool()
@@ -139,9 +138,9 @@ func Test_Unicode(t *testing.T) {
 
 func BenchmarkUnicode(b *testing.B) {
 	ub := UnicodeObject{
-		Chinese: 		"你好，世界",
-		Emoji:			"👋🌍😄😂💊🐂🍺",
-		Russian: 		"ру́сский язы́к",
+		Chinese: "你好，世界",
+		Emoji:   "👋🌍😄😂💊🐂🍺",
+		Russian: "ру́сский язы́к",
 	}
 
 	var enc = NewStructEncoder(UnicodeObject{})
@@ -309,5 +308,3 @@ func NewLargePayload() *LargePayload {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
