@@ -178,6 +178,19 @@ func BenchmarkUnicode(b *testing.B) {
 	}
 }
 
+func BenchmarkUnicodeStdLib(b *testing.B) {
+	ub := UnicodeObject{
+		Chinese: "你好，世界",
+		Emoji:   "👋🌍😄😂💊🐂🍺",
+		Russian: "ру́сский язы́к",
+	}
+
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		json.Marshal(&ub)
+	}
+}
+
 // var fakeType = SmallPayload{}
 // var fake = NewSmallPayload()
 

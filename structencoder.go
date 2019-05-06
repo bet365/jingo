@@ -65,46 +65,51 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 		case opts.Contains("stringer") && reflect.ValueOf(e.t).Field(e.i).MethodByName("String").Kind() != reflect.Invalid:
 
 			e.chunk(`"`)
-			e.flunk()
+
 			t := reflect.ValueOf(e.t).Field(e.i).Type()
-			f := e.f
-			e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
-				e, ok := reflect.NewAt(t, unsafe.Pointer(uintptr(v)+f.Offset)).Interface().(fmt.Stringer)
+			if e.f.Type.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
+
+			conv := func(v unsafe.Pointer, w *Buffer) {
+				e, ok := reflect.NewAt(t, v).Interface().(fmt.Stringer)
 				if !ok {
 					return
 				}
 				sr := e.String()
 				w.Write(*(*[]byte)(unsafe.Pointer(&sr)))
-			})
+			}
+
+			if e.f.Type.Kind() == reflect.Ptr {
+				e.ptrval(conv)
+			} else {
+				e.val(conv)
+			}
+
 			e.chunk(`"`)
 			continue
 
 		/// support calling .JSONEncode(*Buffer) when the 'encoder' option is passed
 		case opts.Contains("encoder"):
 
-			e.flunk()
 			t := reflect.ValueOf(e.t).Field(e.i).Type()
-			f := e.f
+			if e.f.Type.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
+
+			conv := func(v unsafe.Pointer, w *Buffer) {
+				e, ok := reflect.NewAt(t, v).Interface().(JSONEncoder)
+				if !ok {
+					w.Write(null)
+					return
+				}
+				e.JSONEncode(w)
+			}
 
 			if e.f.Type.Kind() == reflect.Ptr {
-				e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
-					p := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(uintptr(v) + f.Offset)))
-					e, ok := reflect.NewAt(t.Elem(), p).Interface().(JSONEncoder)
-					if !ok || p == unsafe.Pointer(nil) {
-						w.Write(null)
-						return
-					}
-					e.JSONEncode(w)
-				})
+				e.ptrval(conv)
 			} else {
-				e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
-					e, ok := reflect.NewAt(t, unsafe.Pointer(uintptr(v)+f.Offset)).Interface().(JSONEncoder)
-					if !ok {
-						w.Write(null)
-						return
-					}
-					e.JSONEncode(w)
-				})
+				e.val(conv)
 			}
 			continue
 
