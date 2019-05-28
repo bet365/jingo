@@ -130,6 +130,9 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 				}
 				if data, err := e.MarshalJSON(); err == nil {
 					w.Write(data)
+				} else {
+					w.Write(null)
+					return
 				}
 			}
 
