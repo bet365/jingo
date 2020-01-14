@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -129,6 +130,16 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 			} else {
 				e.val(conv)
 			}
+			continue
+		}
+
+		if e.f.Type == timeType {
+			e.val(ptrTimeToBuf)
+			continue
+		}
+
+		if e.f.Type.Kind() == reflect.Ptr && timeType == reflect.TypeOf(e.t).Field(e.i).Type.Elem() {
+			e.ptrval(ptrTimeToBuf)
 			continue
 		}
 
@@ -387,3 +398,5 @@ func (o tagOptions) Contains(optionName string) bool {
 	}
 	return false
 }
+
+var timeType = reflect.TypeOf(time.Time{})
