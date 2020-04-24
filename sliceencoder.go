@@ -126,12 +126,20 @@ func (e *SliceEncoder) stringInstr() {
 
 		sl := *(*reflect.SliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
-			if i > zero {
-				w.WriteByte(',')
+
+			if i == 0 {
+				w.WriteByte('"')
 			}
-			w.WriteByte('"')
+
+			if i > zero {
+				w.Write([]byte(`","`))
+			}
+
 			ptrStringToBuf(unsafe.Pointer(sl.Data+(i*e.offset)), w)
-			w.WriteByte('"')
+
+			if i == uintptr(sl.Len)-1 {
+				w.WriteByte('"')
+			}
 		}
 
 		w.WriteByte(']')

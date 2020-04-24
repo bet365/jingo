@@ -1,6 +1,7 @@
 package jingo
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -269,6 +270,91 @@ func BenchmarkTimeStdLib(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		json.Marshal(&to)
+	}
+}
+
+func TestSliceEncoder(t *testing.T) {
+
+	enc := NewSliceEncoder([]string{})
+
+	type marshaler interface {
+		Marshal(s interface{}, w *Buffer)
+	}
+
+	tests := []struct {
+		name string
+		enc  marshaler
+		v    interface{}
+		want []byte
+	}{
+		{
+			"SliceEncoder String - Empty",
+			enc,
+			&[]string{},
+			[]byte("[]"),
+		},
+		{
+			"SliceEncoder String - Single",
+			enc,
+			&[]string{"0"},
+			[]byte(`["0"]`),
+		},
+		{
+			"SliceEncoder String - Many",
+			enc,
+			&[]string{"0", "1", "2"},
+			[]byte(`["0","1","2"]`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			buf := NewBufferFromPool()
+			defer buf.ReturnToPool()
+
+			tt.enc.Marshal(tt.v, buf)
+
+			if !bytes.Equal(tt.want, buf.Bytes) {
+				t.Errorf("\nwant:\n%s\ngot:\n%s", tt.want, buf.Bytes)
+			}
+
+		})
+	}
+}
+
+func BenchmarkSlice(b *testing.B) {
+
+	ss := []string{
+		"a name",
+		"another name",
+		"another",
+		"and one more",
+		"last one, promise",
+	}
+
+	var enc = NewSliceEncoder([]string{})
+
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		buf := NewBufferFromPool()
+		enc.Marshal(&ss, buf)
+		buf.ReturnToPool()
+	}
+}
+
+func BenchmarkSliceStdLib(b *testing.B) {
+	ss := []string{
+		"a name",
+		"another name",
+		"another",
+		"and one more",
+		"last one, promise",
+	}
+
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		json.Marshal(&ss)
 	}
 }
 
