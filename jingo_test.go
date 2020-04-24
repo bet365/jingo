@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 )
 
 type all struct {
@@ -188,6 +189,86 @@ func BenchmarkUnicodeStdLib(b *testing.B) {
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		json.Marshal(&ub)
+	}
+}
+
+type TimeObject struct {
+	Time         time.Time    `json:"time"`
+	PtrTime      *time.Time   `json:"ptrTime"`
+	SliceTime    []time.Time  `json:"sliceTime"`
+	PtrSliceTime []*time.Time `json:"ptrSliceTime"`
+}
+
+func Test_Time(t *testing.T) {
+
+	d0 := time.Date(2000, 9, 17, 20, 4, 26, 0, time.UTC)
+	d1 := time.Date(2001, 9, 17, 20, 4, 26, 0, time.UTC)
+	d2 := time.Date(2002, 9, 17, 20, 4, 26, 0, time.UTC)
+	d3 := time.Date(2003, 9, 17, 20, 4, 26, 0, time.UTC)
+
+	to := TimeObject{
+		Time:         d0,
+		PtrTime:      &d1,
+		SliceTime:    []time.Time{d2},
+		PtrSliceTime: []*time.Time{&d3},
+	}
+
+	wantJSON := `{"time":2000-09-17T20:04:26Z,"ptrTime":2001-09-17T20:04:26Z,"sliceTime":["2002-09-17T20:04:26Z"],"ptrSliceTime":["2003-09-17T20:04:26Z"]}`
+
+	var enc = NewStructEncoder(TimeObject{})
+
+	buf := NewBufferFromPool()
+	defer buf.ReturnToPool()
+	enc.Marshal(&to, buf)
+	resultJSON := buf.String()
+	if resultJSON != wantJSON {
+		t.Errorf("Test_Time Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+	}
+}
+
+func BenchmarkTime(b *testing.B) {
+	b.ReportAllocs()
+
+	d0 := time.Date(2000, 9, 17, 20, 4, 26, 0, time.UTC)
+	d1 := time.Date(2001, 9, 17, 20, 4, 26, 0, time.UTC)
+	d2 := time.Date(2002, 9, 17, 20, 4, 26, 0, time.UTC)
+	d3 := time.Date(2003, 9, 17, 20, 4, 26, 0, time.UTC)
+
+	to := TimeObject{
+		Time:         d0,
+		PtrTime:      &d1,
+		SliceTime:    []time.Time{d2},
+		PtrSliceTime: []*time.Time{&d3},
+	}
+
+	var enc = NewStructEncoder(TimeObject{})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf := NewBufferFromPool()
+		enc.Marshal(&to, buf)
+		buf.ReturnToPool()
+	}
+}
+
+func BenchmarkTimeStdLib(b *testing.B) {
+	b.ReportAllocs()
+
+	d0 := time.Date(2000, 9, 17, 20, 4, 26, 0, time.UTC)
+	d1 := time.Date(2001, 9, 17, 20, 4, 26, 0, time.UTC)
+	d2 := time.Date(2002, 9, 17, 20, 4, 26, 0, time.UTC)
+	d3 := time.Date(2003, 9, 17, 20, 4, 26, 0, time.UTC)
+
+	to := TimeObject{
+		Time:         d0,
+		PtrTime:      &d1,
+		SliceTime:    []time.Time{d2},
+		PtrSliceTime: []*time.Time{&d3},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		json.Marshal(&to)
 	}
 }
 

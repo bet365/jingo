@@ -8,6 +8,7 @@ package jingo
 import (
 	"reflect"
 	"strconv"
+	"time"
 	"unsafe"
 )
 
@@ -89,4 +90,8 @@ func ptrFloat64ToBuf(v unsafe.Pointer, b *Buffer) {
 
 func ptrStringToBuf(v unsafe.Pointer, b *Buffer) {
 	b.Write(*(*[]byte)(v))
+}
+
+func ptrTimeToBuf(v unsafe.Pointer, b *Buffer) {
+	b.Bytes = (*time.Time)(v).AppendFormat(b.Bytes, time.RFC3339Nano)
 }
