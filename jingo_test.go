@@ -358,6 +358,96 @@ func BenchmarkSliceStdLib(b *testing.B) {
 	}
 }
 
+func TestStructEncoder_map(t *testing.T) {
+
+	type s0 struct {
+		M map[string]string `json:"m"`
+	}
+
+	v := s0{map[string]string{"aa": "1", "bb": "2", "cc": "3"}}
+	want := []byte(`{"m":{"aa":"1","bb":"2","cc":"3"}}`)
+
+	enc := NewStructEncoder(s0{})
+
+	buf := NewBufferFromPool()
+	defer buf.ReturnToPool()
+
+	enc.Marshal(&v, buf)
+
+	if !bytes.Equal(want, buf.Bytes) {
+		t.Errorf("\nwant:\n%s\ngot:\n%s\n", want, buf.Bytes)
+	}
+}
+
+func TestStructEncoder_ptrmap(t *testing.T) {
+
+	type s0 struct {
+		M *map[string]string `json:"m"`
+	}
+
+	m := map[string]string{"aa": "1", "bb": "2", "cc": "3"}
+
+	v := s0{&m}
+	want := []byte(`{"m":{"aa":"1","bb":"2","cc":"3"}}`)
+
+	enc := NewStructEncoder(s0{})
+
+	buf := NewBufferFromPool()
+	defer buf.ReturnToPool()
+
+	enc.Marshal(&v, buf)
+
+	if !bytes.Equal(want, buf.Bytes) {
+		t.Errorf("\nwant:\n%s\ngot:\n%s\n", want, buf.Bytes)
+	}
+}
+
+func TestSliceEncoder_map(t *testing.T) {
+
+	v := []map[string]string{
+		nil,
+		{"KA1": "EA1", "KA2": "EA2", "KA3": "EA3"},
+		{"KB1": "EB1", "KB2": "EB2"},
+		{},
+	}
+	want := []byte(`[null,{"KA1":"EA1","KA2":"EA2","KA3":"EA3"},{"KB1":"EB1","KB2":"EB2"},{}]`)
+
+	enc := NewSliceEncoder([]map[string]string{})
+
+	buf := NewBufferFromPool()
+	defer buf.ReturnToPool()
+
+	enc.Marshal(&v, buf)
+
+	if !bytes.Equal(want, buf.Bytes) {
+		t.Errorf("\nwant:\n%s\ngot:\n%s\n", want, buf.Bytes)
+	}
+}
+
+func TestSliceEncoder_ptrmap(t *testing.T) {
+
+	m1 := map[string]string{"KA1": "EA1", "KA2": "EA2", "KA3": "EA3"}
+	m2 := map[string]string{"KB1": "EB1", "KB2": "EB2"}
+	v := []*map[string]string{
+		nil,
+		&m1,
+		&m2,
+		{},
+	}
+	want := []byte(`[null,{"KA1":"EA1","KA2":"EA2","KA3":"EA3"},{"KB1":"EB1","KB2":"EB2"},{}]`)
+
+	enc := NewSliceEncoder([]*map[string]string{})
+
+	buf := NewBufferFromPool()
+	defer buf.ReturnToPool()
+
+	enc.Marshal(&v, buf)
+
+	if !bytes.Equal(want, buf.Bytes) {
+		t.Errorf("\nwant:\n%s\ngot:\n%s\n", want, buf.Bytes)
+	}
+}
+
 // var fakeType = SmallPayload{}
 // var fake = NewSmallPayload()
 

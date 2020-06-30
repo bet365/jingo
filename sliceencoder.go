@@ -28,6 +28,11 @@ func (e *SliceEncoder) Marshal(s interface{}, w *Buffer) {
 
 // NewSliceEncoder builds a new SliceEncoder
 func NewSliceEncoder(t interface{}) *SliceEncoder {
+	return NewSliceEncoderWithConfig(t, DefaultConfig())
+}
+
+// NewSliceEncoderWithConfig builds a new SliceEncoder using Config provided.
+func NewSliceEncoderWithConfig(t interface{}, cfg Config) *SliceEncoder {
 	e := &SliceEncoder{}
 
 	e.tt = reflect.TypeOf(t)
@@ -41,10 +46,13 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 	// what type of encoding do we need
 	switch e.tt.Elem().Kind() {
 	case reflect.Slice:
-		e.sliceInstr()
+		e.sliceInstr(cfg)
 
 	case reflect.Struct:
-		e.structInstr()
+		e.structInstr(cfg)
+
+	case reflect.Map:
+		e.mapInstr(cfg)
 
 	case reflect.String:
 		e.stringInstr()
@@ -59,10 +67,13 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 
 		switch e.tt.Elem().Elem().Kind() {
 		case reflect.Slice:
-			e.ptrSliceInstr()
+			e.ptrSliceInstr(cfg)
 
 		case reflect.Struct:
-			e.ptrStrctInstr()
+			e.ptrStrctInstr(cfg)
+
+		case reflect.Map:
+			e.ptrMapInstr(cfg)
 
 		case reflect.String:
 			e.ptrStringInstr()
@@ -84,8 +95,8 @@ var (
 	zero = uintptr(0)
 )
 
-func (e *SliceEncoder) sliceInstr() {
-	enc := NewSliceEncoder(reflect.New(e.tt.Elem()).Elem().Interface())
+func (e *SliceEncoder) sliceInstr(cfg Config) {
+	enc := NewSliceEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Interface(), cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
@@ -102,8 +113,8 @@ func (e *SliceEncoder) sliceInstr() {
 	}
 }
 
-func (e *SliceEncoder) structInstr() {
-	enc := NewStructEncoder(reflect.New(e.tt.Elem()).Elem().Interface())
+func (e *SliceEncoder) structInstr(cfg Config) {
+	enc := NewStructEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Interface(), cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
@@ -113,6 +124,24 @@ func (e *SliceEncoder) structInstr() {
 				w.WriteByte(',')
 			}
 			s := unsafe.Pointer(sl.Data + (i * e.offset))
+			enc.Marshal(s, w)
+		}
+
+		w.WriteByte(']')
+	}
+}
+
+func (e *SliceEncoder) mapInstr(cfg Config) {
+	enc := NewMapEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Interface(), cfg)
+	e.instruction = func(v unsafe.Pointer, w *Buffer) {
+		w.WriteByte('[')
+
+		sl := *(*sliceHeader)(v)
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			if i > zero {
+				w.WriteByte(',')
+			}
+			s := unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))
 			enc.Marshal(s, w)
 		}
 
@@ -186,8 +215,8 @@ func (e *SliceEncoder) timeInstr() {
 	}
 }
 
-func (e *SliceEncoder) ptrSliceInstr() {
-	enc := NewSliceEncoder(reflect.New(e.tt.Elem()).Elem().Elem().Interface())
+func (e *SliceEncoder) ptrSliceInstr(cfg Config) {
+	enc := NewSliceEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Elem().Interface(), cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
@@ -209,8 +238,8 @@ func (e *SliceEncoder) ptrSliceInstr() {
 	}
 }
 
-func (e *SliceEncoder) ptrStrctInstr() {
-	enc := NewStructEncoder(reflect.New(e.tt.Elem().Elem()).Elem().Interface())
+func (e *SliceEncoder) ptrStrctInstr(cfg Config) {
+	enc := NewStructEncoderWithConfig(reflect.New(e.tt.Elem().Elem()).Elem().Interface(), cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
@@ -221,6 +250,29 @@ func (e *SliceEncoder) ptrStrctInstr() {
 			}
 
 			s := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(sl.Data + (i * e.offset))))
+			if s == unsafe.Pointer(nil) {
+				w.Write(null)
+				continue
+			}
+			enc.Marshal(s, w)
+		}
+
+		w.WriteByte(']')
+	}
+}
+
+func (e *SliceEncoder) ptrMapInstr(cfg Config) {
+	enc := NewMapEncoderWithConfig(reflect.New(e.tt.Elem().Elem()).Elem().Interface(), cfg)
+	e.instruction = func(v unsafe.Pointer, w *Buffer) {
+		w.WriteByte('[')
+
+		sl := *(*sliceHeader)(v)
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			if i > zero {
+				w.WriteByte(',')
+			}
+
+			s := *(*unsafe.Pointer)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))
 			if s == unsafe.Pointer(nil) {
 				w.Write(null)
 				continue
