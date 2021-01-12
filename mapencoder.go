@@ -116,14 +116,14 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 
 	switch tt.Elem().Kind() {
 	case reflect.Slice:
-		enc := NewSliceEncoder(reflect.New(tt.Elem()).Elem().Interface())
+		enc := NewSliceEncoderWithConfig(reflect.New(tt.Elem()).Elem().Interface(), cfg)
 		econv = func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v))
 			enc.Marshal(em, w)
 		}
 
 	case reflect.Struct:
-		enc := NewStructEncoder(reflect.New(tt.Elem()).Elem().Interface())
+		enc := NewStructEncoderWithConfig(reflect.New(tt.Elem()).Elem().Interface(), cfg)
 		econv = func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v))
 			enc.Marshal(em, w)
@@ -139,14 +139,14 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 	case reflect.Ptr:
 		switch tt.Elem().Elem().Kind() {
 		case reflect.Slice:
-			enc := NewSliceEncoder(reflect.New(tt.Elem().Elem()).Elem().Interface())
+			enc := NewSliceEncoderWithConfig(reflect.New(tt.Elem().Elem()).Elem().Interface(), cfg)
 			econv = e.ptrElemInstr(func(v unsafe.Pointer, w *Buffer) {
 				var em interface{} = unsafe.Pointer(uintptr(v))
 				enc.Marshal(em, w)
 			})
 
 		case reflect.Struct:
-			enc := NewStructEncoder(reflect.New(tt.Elem().Elem()).Elem().Interface())
+			enc := NewStructEncoderWithConfig(reflect.New(tt.Elem().Elem()).Elem().Interface(), cfg)
 			econv = e.ptrElemInstr(func(v unsafe.Pointer, w *Buffer) {
 				var em interface{} = unsafe.Pointer(uintptr(v))
 				enc.Marshal(em, w)
