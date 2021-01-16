@@ -58,7 +58,10 @@ var _ encoding.TextMarshaler = &textStruct{}
 
 func TestMapEncoder_key_marshaltext(t *testing.T) {
 
-	enc := NewMapEncoder(map[*textStruct]string{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+
+	enc := NewMapEncoderWithConfig(map[*textStruct]string{}, cfg)
 
 	tests := []struct {
 		name string
@@ -114,7 +117,9 @@ func TestMapEncoder_key_marshaltext(t *testing.T) {
 
 func TestMapEncoder_key_time(t *testing.T) {
 
-	enc := NewMapEncoder(map[time.Time]string{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[time.Time]string{}, cfg)
 
 	d0 := time.Date(2000, 9, 17, 20, 4, 26, 0, time.UTC)
 	d1 := time.Date(2001, 9, 17, 20, 4, 26, 0, time.UTC)
@@ -160,7 +165,9 @@ func TestMapEncoder_key_time(t *testing.T) {
 
 func TestMapEncoder_key_ptrtime(t *testing.T) {
 
-	enc := NewMapEncoder(map[*time.Time]string{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[*time.Time]string{}, cfg)
 
 	d0 := time.Date(2000, 9, 17, 20, 4, 26, 0, time.UTC)
 	d1 := time.Date(2001, 9, 17, 20, 4, 26, 0, time.UTC)
@@ -218,7 +225,9 @@ type innerStruct struct {
 
 func TestMapEncoder_elem_struct(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]innerStruct{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]innerStruct{}, cfg)
 
 	tests := []struct {
 		name string
@@ -254,7 +263,9 @@ func TestMapEncoder_elem_struct(t *testing.T) {
 
 func TestMapEncoder_elem_ptrstruct(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]*innerStruct{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]*innerStruct{}, cfg)
 
 	var (
 		s0 = innerStruct{"s0"}
@@ -306,7 +317,9 @@ func TestMapEncoder_elem_ptrstruct(t *testing.T) {
 
 func TestMapEncoder_elem_slice(t *testing.T) {
 
-	enc := NewMapEncoder(map[string][]int{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string][]int{}, cfg)
 
 	tests := []struct {
 		name string
@@ -347,7 +360,9 @@ func TestMapEncoder_elem_slice(t *testing.T) {
 
 func TestMapEncoder_elem_ptrslice(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]*[]int{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]*[]int{}, cfg)
 
 	var (
 		s0 = []int{1, 2, 3}
@@ -393,7 +408,9 @@ func TestMapEncoder_elem_ptrslice(t *testing.T) {
 
 func TestMapEncoder_elem_map(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]map[string]string{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]map[string]string{}, cfg)
 
 	tests := []struct {
 		name string
@@ -448,7 +465,9 @@ func TestMapEncoder_elem_map(t *testing.T) {
 
 func TestMapEncoder_elem_ptrmap(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]*map[string]string{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]*map[string]string{}, cfg)
 
 	var (
 		m1 = map[string]string{"KA1": "EA1"}
@@ -500,7 +519,9 @@ func TestMapEncoder_elem_ptrmap(t *testing.T) {
 
 func TestMapEncoder_elem_ptrstring(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]*string{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]*string{}, cfg)
 
 	var (
 		aa = "aa"
@@ -562,7 +583,9 @@ func TestMapEncoder_elem_ptrstring(t *testing.T) {
 
 func TestMapEncoder_elem_nonstring(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]int{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]int{}, cfg)
 
 	tests := []struct {
 		name string
@@ -597,7 +620,9 @@ func TestMapEncoder_elem_nonstring(t *testing.T) {
 }
 func TestMapEncoder_elem_ptrnonstring(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]*int{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]*int{}, cfg)
 
 	var (
 		one   = 1
@@ -648,7 +673,9 @@ func TestMapEncoder_elem_ptrnonstring(t *testing.T) {
 }
 func TestMapEncoder_elem_marshaltext(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]textStruct{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]textStruct{}, cfg)
 
 	tests := []struct {
 		name string
@@ -689,7 +716,9 @@ func TestMapEncoder_elem_marshaltext(t *testing.T) {
 
 func TestMapEncoder_elem_ptrmarshaltext(t *testing.T) {
 
-	enc := NewMapEncoder(map[string]*textStruct{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewMapEncoderWithConfig(map[string]*textStruct{}, cfg)
 
 	aa := &textStruct{[]byte("aa")}
 
@@ -747,6 +776,9 @@ type marshaler interface {
 
 func TestMapEncoder_sorted_nonstring(t *testing.T) {
 
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+
 	tests := []struct {
 		name string
 		enc  marshaler
@@ -754,7 +786,7 @@ func TestMapEncoder_sorted_nonstring(t *testing.T) {
 	}{
 		{
 			"key: int",
-			NewMapEncoder(map[int]string{}),
+			NewMapEncoderWithConfig(map[int]string{}, cfg),
 			&map[int]string{
 				4:        "A",
 				59:       "B",
@@ -793,10 +825,7 @@ func TestMapEncoder_sorted_nonstring(t *testing.T) {
 
 func TestMapEncoder_unsorted_fast_string(t *testing.T) {
 
-	var cfg Config
-	cfg.SetSortMapKeys(false)
-
-	enc := NewMapEncoderWithConfig(map[string]string{}, cfg)
+	enc := NewMapEncoder(map[string]string{})
 
 	tests := []struct {
 		name string
@@ -842,10 +871,7 @@ func TestMapEncoder_unsorted_fast_string(t *testing.T) {
 
 func TestMapEncoder_unsorted_non_string(t *testing.T) {
 
-	var cfg Config
-	cfg.SetSortMapKeys(false)
-
-	enc := NewMapEncoderWithConfig(map[int]string{}, cfg)
+	enc := NewMapEncoder(map[int]string{})
 
 	tests := []struct {
 		name string

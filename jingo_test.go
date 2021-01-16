@@ -367,7 +367,9 @@ func TestStructEncoder_map(t *testing.T) {
 	v := s0{map[string]string{"aa": "1", "bb": "2", "cc": "3"}}
 	want := []byte(`{"m":{"aa":"1","bb":"2","cc":"3"}}`)
 
-	enc := NewStructEncoder(s0{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewStructEncoderWithConfig(s0{}, cfg)
 
 	buf := NewBufferFromPool()
 	defer buf.ReturnToPool()
@@ -390,7 +392,9 @@ func TestStructEncoder_ptrmap(t *testing.T) {
 	v := s0{&m}
 	want := []byte(`{"m":{"aa":"1","bb":"2","cc":"3"}}`)
 
-	enc := NewStructEncoder(s0{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewStructEncoderWithConfig(s0{}, cfg)
 
 	buf := NewBufferFromPool()
 	defer buf.ReturnToPool()
@@ -412,7 +416,9 @@ func TestSliceEncoder_map(t *testing.T) {
 	}
 	want := []byte(`[null,{"KA1":"EA1","KA2":"EA2","KA3":"EA3"},{"KB1":"EB1","KB2":"EB2"},{}]`)
 
-	enc := NewSliceEncoder([]map[string]string{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewSliceEncoderWithConfig([]map[string]string{}, cfg)
 
 	buf := NewBufferFromPool()
 	defer buf.ReturnToPool()
@@ -436,7 +442,9 @@ func TestSliceEncoder_ptrmap(t *testing.T) {
 	}
 	want := []byte(`[null,{"KA1":"EA1","KA2":"EA2","KA3":"EA3"},{"KB1":"EB1","KB2":"EB2"},{}]`)
 
-	enc := NewSliceEncoder([]*map[string]string{})
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+	enc := NewSliceEncoderWithConfig([]*map[string]string{}, cfg)
 
 	buf := NewBufferFromPool()
 	defer buf.ReturnToPool()

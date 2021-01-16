@@ -504,7 +504,7 @@ func (e *MapEncoder) instr(kconv, econv func(unsafe.Pointer, *Buffer)) {
 func DefaultConfig() Config {
 
 	c := Config{}
-	c.SetSortMapKeys(true)
+	c.SetSortMapKeys(false)
 	return c
 }
 
