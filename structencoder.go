@@ -64,88 +64,28 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 		switch {
 		/// support calling .String() when the 'stringer' option is passed
 		case opts.Contains("stringer") && reflect.ValueOf(e.t).Field(e.i).MethodByName("String").Kind() != reflect.Invalid:
-
-			e.chunk(`"`)
-
-			t := reflect.ValueOf(e.t).Field(e.i).Type()
-			if e.f.Type.Kind() == reflect.Ptr {
-				t = t.Elem()
-			}
-
-			conv := func(v unsafe.Pointer, w *Buffer) {
-				e, ok := reflect.NewAt(t, v).Interface().(fmt.Stringer)
-				if !ok {
-					return
-				}
-				sr := e.String()
-				w.Write(*(*[]byte)(unsafe.Pointer(&sr)))
-			}
-
-			if e.f.Type.Kind() == reflect.Ptr {
-				e.ptrval(conv)
-			} else {
-				e.val(conv)
-			}
-
-			e.chunk(`"`)
-			continue
+			e.optInstrStringer()
 
 		/// support calling .JSONEncode(*Buffer) when the 'encoder' option is passed
 		case opts.Contains("encoder"):
-
-			t := reflect.ValueOf(e.t).Field(e.i).Type()
-			if e.f.Type.Kind() == reflect.Ptr {
-				t = t.Elem()
-			}
-
-			conv := func(v unsafe.Pointer, w *Buffer) {
-				e, ok := reflect.NewAt(t, v).Interface().(JSONEncoder)
-				if !ok {
-					w.Write(null)
-					return
-				}
-				e.JSONEncode(w)
-			}
-
-			if e.f.Type.Kind() == reflect.Ptr {
-				e.ptrval(conv)
-			} else {
-				e.val(conv)
-			}
-			continue
+			e.optInstrEncoder()
 
 		/// support writing byteslice-like items using 'raw' option.
 		case opts.Contains("raw"):
-			conv := func(v unsafe.Pointer, w *Buffer) {
-				s := *(*[]byte)(v)
-				if len(s) == 0 {
-					w.Write(null)
-					return
-				}
-				w.Write(s)
-			}
+			e.optInstrRaw()
 
-			if e.f.Type.Kind() == reflect.Ptr {
-				e.ptrval(conv)
-			} else {
-				e.val(conv)
-			}
-			continue
-		}
+		/// suport escaping reserved json characters from byteslice-like items and slices
+		case opts.Contains("escape"):
+			e.optInstrEscape()
 
-		if e.f.Type == timeType {
+		/// time is a type of struct, not a kind, so somewhat of a special case here.
+		case e.f.Type == timeType:
 			e.val(ptrTimeToBuf)
-			continue
-		}
-
-		if e.f.Type.Kind() == reflect.Ptr && timeType == reflect.TypeOf(e.t).Field(e.i).Type.Elem() {
+		case e.f.Type.Kind() == reflect.Ptr && timeType == reflect.TypeOf(e.t).Field(e.i).Type.Elem():
 			e.ptrval(ptrTimeToBuf)
-			continue
-		}
 
 		// write the value instruction depending on type
-		switch e.f.Type.Kind() {
-		case reflect.Ptr:
+		case e.f.Type.Kind() == reflect.Ptr:
 			// create an instruction which can read from a pointer field
 			e.valueInst(e.f.Type.Elem().Kind(), e.ptrval)
 
@@ -159,6 +99,94 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 	e.flunk()
 
 	return e
+}
+
+func (e *StructEncoder) optInstrStringer() {
+	e.chunk(`"`)
+
+	t := reflect.ValueOf(e.t).Field(e.i).Type()
+	if e.f.Type.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	conv := func(v unsafe.Pointer, w *Buffer) {
+		e, ok := reflect.NewAt(t, v).Interface().(fmt.Stringer)
+		if !ok {
+			return
+		}
+		sr := e.String()
+		w.Write(*(*[]byte)(unsafe.Pointer(&sr)))
+	}
+
+	if e.f.Type.Kind() == reflect.Ptr {
+		e.ptrval(conv)
+	} else {
+		e.val(conv)
+	}
+
+	e.chunk(`"`)
+}
+
+func (e *StructEncoder) optInstrEncoder() {
+	t := reflect.ValueOf(e.t).Field(e.i).Type()
+	if e.f.Type.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	conv := func(v unsafe.Pointer, w *Buffer) {
+		e, ok := reflect.NewAt(t, v).Interface().(JSONEncoder)
+		if !ok {
+			w.Write(null)
+			return
+		}
+		e.JSONEncode(w)
+	}
+
+	if e.f.Type.Kind() == reflect.Ptr {
+		e.ptrval(conv)
+	} else {
+		e.val(conv)
+	}
+}
+
+func (e *StructEncoder) optInstrRaw() {
+	conv := func(v unsafe.Pointer, w *Buffer) {
+		s := *(*[]byte)(v)
+		if len(s) == 0 {
+			w.Write(null)
+			return
+		}
+		w.Write(s)
+	}
+
+	if e.f.Type.Kind() == reflect.Ptr {
+		e.ptrval(conv)
+	} else {
+		e.val(conv)
+	}
+}
+
+func (e *StructEncoder) optInstrEscape() {
+	if e.f.Type.Kind() == reflect.Slice {
+		e.flunk()
+
+		es := EscapeString("")
+		enc := NewSliceEncoder(&es)
+		f := e.f
+		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
+			enc.Marshal(em, w)
+		})
+		return
+	}
+
+	if e.f.Type.Kind() == reflect.Ptr {
+		e.ptrstringval(ptrEscapeStringToBuf)
+	} else {
+		e.chunk(`"`)
+		e.val(ptrEscapeStringToBuf)
+		e.chunk(`"`)
+	}
 }
 
 // chunk writes a chunk of body data to the chunk buffer. only for writing static
@@ -268,7 +296,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 			// now create an instruction to marshal the field
 			f := e.f
 			e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
-				var em interface{} = unsafe.Pointer(*(*uintptr)(unsafe.Pointer(uintptr(v) + f.Offset)))
+				var em interface{} = unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset)))
 				if em == unsafe.Pointer(nil) {
 					w.Write(null)
 					return
@@ -324,7 +352,7 @@ func (e *StructEncoder) ptrval(conv func(unsafe.Pointer, *Buffer)) {
 	f := e.f
 	e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
 
-		p := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(uintptr(v) + f.Offset)))
+		p := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset)))
 		if p == unsafe.Pointer(nil) {
 			w.Write(null)
 			return
@@ -343,7 +371,7 @@ func (e *StructEncoder) ptrstringval(conv func(unsafe.Pointer, *Buffer)) {
 	f := e.f
 	e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
 
-		p := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(uintptr(v) + f.Offset)))
+		p := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset)))
 		if p == unsafe.Pointer(nil) {
 			w.Write(null)
 			return
@@ -400,3 +428,11 @@ func (o tagOptions) Contains(optionName string) bool {
 }
 
 var timeType = reflect.TypeOf(time.Time{})
+
+// EscapeString can be used to cast your string slice encoders in replacement of `[]string` when using SliceEncoder directly.
+// This is only necessary if you wish for the slice elements to be escaped of contorl sequences.
+// e.g var mySliceEncoder = NewSliceEncoder([]jingo.EscapeString{})
+// You can and should just use the `,escape` option on your struct fields when using StructEncoder.
+type EscapeString string
+
+var escapeStringType = reflect.TypeOf(EscapeString(""))
