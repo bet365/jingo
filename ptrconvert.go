@@ -10,11 +10,7 @@ import (
 	"strconv"
 	"time"
 	"unsafe"
-
-	"fmt"
 )
-
-var _ = fmt.Sprint("")
 
 var typeconv = map[reflect.Kind]func(unsafe.Pointer, *Buffer){
 	reflect.Bool:    ptrBoolToBuf,
