@@ -170,8 +170,8 @@ func (e *StructEncoder) optInstrEscape() {
 	if e.f.Type.Kind() == reflect.Slice {
 		e.flunk()
 
-		es := EscapeString("")
-		enc := NewSliceEncoder(&es)
+		/// create an escape string encoder internally instead of mirroring the struct, so people only need to pass the ,escape opt instead
+		enc := NewSliceEncoder([]EscapeString{})
 		f := e.f
 		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
