@@ -24,6 +24,7 @@ type MapEncoder struct {
 	typ         unsafe.Pointer
 	ttKey       reflect.Type
 	ttElem      reflect.Type
+	cfg         Config
 }
 
 // NewMapEncoder builds a new MapEncoder.
@@ -43,7 +44,7 @@ var textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
 // NewMapEncoderWithConfig builds a new MapEncoder using Config provided.
 func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 
-	e := &MapEncoder{}
+	e := &MapEncoder{cfg: cfg}
 
 	tt := reflect.TypeOf(t)
 
@@ -83,7 +84,7 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 		// MapEncoder/Key:_string,_Elem:_string_(sorted)-8     0.00
 		// MapEncoder/Key:_string,_Elem:_string_(unsorted)-8   0.00
 
-		if cfg.SortMapKeys() {
+		if e.cfg.SortMapKeys() {
 			e.sortStrStrInstr()
 			return e
 		}
@@ -116,21 +117,21 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 
 	switch tt.Elem().Kind() {
 	case reflect.Slice:
-		enc := NewSliceEncoderWithConfig(reflect.New(tt.Elem()).Elem().Interface(), cfg)
+		enc := NewSliceEncoderWithConfig(reflect.New(tt.Elem()).Elem().Interface(), e.cfg)
 		econv = func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v))
 			enc.Marshal(em, w)
 		}
 
 	case reflect.Struct:
-		enc := NewStructEncoderWithConfig(reflect.New(tt.Elem()).Elem().Interface(), cfg)
+		enc := NewStructEncoderWithConfig(reflect.New(tt.Elem()).Elem().Interface(), e.cfg)
 		econv = func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v))
 			enc.Marshal(em, w)
 		}
 
 	case reflect.Map:
-		enc := NewMapEncoderWithConfig(reflect.New(tt.Elem()).Elem().Interface(), cfg)
+		enc := NewMapEncoderWithConfig(reflect.New(tt.Elem()).Elem().Interface(), e.cfg)
 		econv = func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v))
 			enc.Marshal(em, w)
@@ -139,21 +140,21 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 	case reflect.Ptr:
 		switch tt.Elem().Elem().Kind() {
 		case reflect.Slice:
-			enc := NewSliceEncoderWithConfig(reflect.New(tt.Elem().Elem()).Elem().Interface(), cfg)
+			enc := NewSliceEncoderWithConfig(reflect.New(tt.Elem().Elem()).Elem().Interface(), e.cfg)
 			econv = e.ptrElemInstr(func(v unsafe.Pointer, w *Buffer) {
 				var em interface{} = unsafe.Pointer(uintptr(v))
 				enc.Marshal(em, w)
 			})
 
 		case reflect.Struct:
-			enc := NewStructEncoderWithConfig(reflect.New(tt.Elem().Elem()).Elem().Interface(), cfg)
+			enc := NewStructEncoderWithConfig(reflect.New(tt.Elem().Elem()).Elem().Interface(), e.cfg)
 			econv = e.ptrElemInstr(func(v unsafe.Pointer, w *Buffer) {
 				var em interface{} = unsafe.Pointer(uintptr(v))
 				enc.Marshal(em, w)
 			})
 
 		case reflect.Map:
-			enc := NewMapEncoderWithConfig(reflect.New(tt.Elem().Elem()).Elem().Interface(), cfg)
+			enc := NewMapEncoderWithConfig(reflect.New(tt.Elem().Elem()).Elem().Interface(), e.cfg)
 			econv = e.ptrElemInstr(func(v unsafe.Pointer, w *Buffer) {
 				var em interface{} = unsafe.Pointer(uintptr(v))
 				enc.Marshal(em, w)
@@ -249,7 +250,7 @@ KeyInstr:
 		panic("unsupported key type")
 	}
 
-	if cfg.SortMapKeys() {
+	if e.cfg.SortMapKeys() {
 
 		e.sortInstr(kconv, econv)
 		return e
@@ -500,7 +501,7 @@ func (e *MapEncoder) instr(kconv, econv func(unsafe.Pointer, *Buffer)) {
 	}
 }
 
-// DefaultConfig returns DefaultConfiguration for NewEncoder instructions. By default, MapEncoders sort map keys when encoding JSON (recommended for encoding/json behaviour)
+// DefaultConfig returns DefaultConfiguration for NewEncoder instructions. By default, map keys are unsorted.
 func DefaultConfig() Config {
 
 	c := Config{}
