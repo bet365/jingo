@@ -7,7 +7,7 @@ import (
 func BenchmarkMapEncoder(b *testing.B) {
 
 	cfg := DefaultConfig()
-	cfg.SetSortMapKeys(false)
+	cfg.SetSortMapKeys(true)
 
 	for _, bb := range []struct {
 		name    string
@@ -15,7 +15,7 @@ func BenchmarkMapEncoder(b *testing.B) {
 		s       interface{}
 	}{
 		{
-			"Key: string, Elem: string (sorted)",
+			"Key: string, Elem: string",
 			NewMapEncoder(map[string]string{}),
 			&map[string]string{
 				"10": "1",
@@ -31,7 +31,7 @@ func BenchmarkMapEncoder(b *testing.B) {
 			},
 		},
 		{
-			"Key: string, Elem: string (unsorted)",
+			"Key: string, Elem: string sorted",
 			NewMapEncoderWithConfig(map[string]string{}, cfg),
 			&map[string]string{
 				"10": "1",
@@ -47,7 +47,7 @@ func BenchmarkMapEncoder(b *testing.B) {
 			},
 		},
 		{
-			"Key: int, Elem: string (sorted)",
+			"Key: int, Elem: string",
 			NewMapEncoder(map[int]string{}),
 			&map[int]string{
 				10: "1",
@@ -63,7 +63,7 @@ func BenchmarkMapEncoder(b *testing.B) {
 			},
 		},
 		{
-			"Key: int, Elem: string (unsorted)",
+			"Key: int, Elem: string sorted",
 			NewMapEncoderWithConfig(map[int]string{}, cfg),
 			&map[int]string{
 				10: "1",
@@ -79,7 +79,7 @@ func BenchmarkMapEncoder(b *testing.B) {
 			},
 		},
 		{
-			"Key: MarshalText, Elem: string (sorted)",
+			"Key: MarshalText, Elem: string",
 			NewMapEncoder(map[*textStruct]string{}),
 			&map[*textStruct]string{
 				{[]byte("10")}: "1",
@@ -95,7 +95,7 @@ func BenchmarkMapEncoder(b *testing.B) {
 			},
 		},
 		{
-			"Key: MarshalText, Elem: string (unsorted)",
+			"Key: MarshalText, Elem: string sorted",
 			NewMapEncoderWithConfig(map[*textStruct]string{}, cfg),
 			&map[*textStruct]string{
 				{[]byte("10")}: "1",
