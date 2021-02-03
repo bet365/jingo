@@ -85,11 +85,11 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 		// MapEncoder/Key:_string,_Elem:_string_(unsorted)-8   0.00
 
 		if e.cfg.SortMapKeys() {
-			e.sortStrStrInstr()
+			e.instruction = e.sortStrStrInstr()
 			return e
 		}
 
-		e.strStrInstr()
+		e.instruction = e.strStrInstr()
 		return e
 	}
 
@@ -252,11 +252,11 @@ KeyInstr:
 
 	if e.cfg.SortMapKeys() {
 
-		e.sortInstr(kconv, econv)
+		e.instruction = e.sortInstr(kconv, econv)
 		return e
 	}
 
-	e.instr(kconv, econv)
+	e.instruction = e.instr(kconv, econv)
 
 	return e
 }
@@ -307,9 +307,9 @@ func (e *MapEncoder) ptrKeyInstr(conv func(unsafe.Pointer, *Buffer)) func(unsafe
 
 var emptyObj = []byte("{}")
 
-func (e *MapEncoder) sortStrStrInstr() {
+func (e *MapEncoder) sortStrStrInstr() func(unsafe.Pointer, *Buffer) {
 
-	e.instruction = func(p unsafe.Pointer, w *Buffer) {
+	return func(p unsafe.Pointer, w *Buffer) {
 
 		m := *(*unsafe.Pointer)(p)
 
@@ -356,9 +356,9 @@ func (e *MapEncoder) sortStrStrInstr() {
 	}
 }
 
-func (e *MapEncoder) strStrInstr() {
+func (e *MapEncoder) strStrInstr() func(unsafe.Pointer, *Buffer) {
 
-	e.instruction = func(p unsafe.Pointer, w *Buffer) {
+	return func(p unsafe.Pointer, w *Buffer) {
 
 		m := *(*unsafe.Pointer)(p)
 
@@ -395,9 +395,9 @@ func (e *MapEncoder) strStrInstr() {
 	}
 }
 
-func (e *MapEncoder) sortInstr(kconv, econv func(unsafe.Pointer, *Buffer)) {
+func (e *MapEncoder) sortInstr(kconv, econv func(unsafe.Pointer, *Buffer)) func(unsafe.Pointer, *Buffer) {
 
-	e.instruction = func(p unsafe.Pointer, w *Buffer) {
+	return func(p unsafe.Pointer, w *Buffer) {
 
 		m := *(*unsafe.Pointer)(p)
 
@@ -463,9 +463,9 @@ func (e *MapEncoder) sortInstr(kconv, econv func(unsafe.Pointer, *Buffer)) {
 	}
 }
 
-func (e *MapEncoder) instr(kconv, econv func(unsafe.Pointer, *Buffer)) {
+func (e *MapEncoder) instr(kconv, econv func(unsafe.Pointer, *Buffer)) func(unsafe.Pointer, *Buffer) {
 
-	e.instruction = func(p unsafe.Pointer, w *Buffer) {
+	return func(p unsafe.Pointer, w *Buffer) {
 
 		m := *(*unsafe.Pointer)(p)
 
