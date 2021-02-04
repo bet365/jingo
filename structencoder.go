@@ -430,7 +430,7 @@ func (o tagOptions) Contains(optionName string) bool {
 var timeType = reflect.TypeOf(time.Time{})
 
 // EscapeString can be used to cast your string slice encoders in replacement of `[]string` when using SliceEncoder directly.
-// This is only necessary if you wish for the slice elements to be escaped of contorl sequences.
+// This is only necessary if you wish for the slice elements to be escaped of control sequences.
 // e.g var mySliceEncoder = NewSliceEncoder([]jingo.EscapeString{})
 // You can and should just use the `,escape` option on your struct fields when using StructEncoder.
 type EscapeString string
