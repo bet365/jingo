@@ -114,8 +114,7 @@ func (e *StructEncoder) optInstrStringer() {
 		if !ok {
 			return
 		}
-		sr := e.String()
-		w.Write(*(*[]byte)(unsafe.Pointer(&sr)))
+		w.WriteString(e.String())
 	}
 
 	if e.f.Type.Kind() == reflect.Ptr {
@@ -151,12 +150,12 @@ func (e *StructEncoder) optInstrEncoder() {
 
 func (e *StructEncoder) optInstrRaw() {
 	conv := func(v unsafe.Pointer, w *Buffer) {
-		s := *(*[]byte)(v)
+		s := *(*string)(v)
 		if len(s) == 0 {
 			w.Write(null)
 			return
 		}
-		w.Write(s)
+		w.WriteString(s)
 	}
 
 	if e.f.Type.Kind() == reflect.Ptr {
