@@ -95,3 +95,25 @@ func ptrStringToBuf(v unsafe.Pointer, b *Buffer) {
 func ptrTimeToBuf(v unsafe.Pointer, b *Buffer) {
 	b.Bytes = (*time.Time)(v).AppendFormat(b.Bytes, time.RFC3339Nano)
 }
+
+func ptrEscapeStringToBuf(v unsafe.Pointer, w *Buffer) {
+	bs := *(*string)(v)
+
+	pos := 0
+	for i := 0; i < len(bs); i++ {
+		switch bs[i] {
+		case '\\', '"':
+			if pos < i {
+				w.WriteString(bs[pos:i])
+			}
+			pos = i + 1
+
+			w.WriteByte('\\')
+			w.WriteByte(bs[i])
+		}
+	}
+
+	if pos < len(bs) {
+		w.WriteString(bs[pos:])
+	}
+}

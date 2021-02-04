@@ -25,8 +25,9 @@ type all struct {
 	PropFloat64 float64 `json:"propFloat64,stringer"`
 	PropString  string  `json:"propString"`
 	PropStruct  struct {
-		PropNames []string  `json:"propName"`
-		PropPs    []*string `json:"ps"`
+		PropNames        []string  `json:"propName"`
+		PropPs           []*string `json:"ps"`
+		PropNamesEscaped []string  `json:"propNameEscaped,escape"`
 	} `json:"propStruct"`
 	PropEncode     encode0  `json:"propEncode,encoder"`
 	PropEncodeP    *encode0 `json:"propEncodeP,encoder"`
@@ -53,7 +54,7 @@ func (e *encode1) JSONEncode(w *Buffer) {
 	}
 }
 
-func ExampleJsonAll() {
+func Example() {
 
 	enc := NewStructEncoder(all{})
 	b := NewBufferFromPool()
@@ -75,11 +76,13 @@ func ExampleJsonAll() {
 		PropFloat64: 2799999999888.28293031999999,
 		PropString:  "thirty two thirty four",
 		PropStruct: struct {
-			PropNames []string  `json:"propName"`
-			PropPs    []*string `json:"ps"`
+			PropNames        []string  `json:"propName"`
+			PropPs           []*string `json:"ps"`
+			PropNamesEscaped []string  `json:"propNameEscaped,escape"`
 		}{
-			PropNames: []string{"a name", "another name", "another"},
-			PropPs:    []*string{&s, nil, &s},
+			PropNames:        []string{"a name", "another name", "another"},
+			PropPs:           []*string{&s, nil, &s},
+			PropNamesEscaped: []string{"one\\two\\,three\"", "\"four\\five\\,six\""},
 		},
 		PropEncode:  encode0{'1'},
 		PropEncodeP: &encode0{'2'},
@@ -89,10 +92,10 @@ func ExampleJsonAll() {
 	fmt.Println(b.String())
 
 	// Output:
-	// {"propBool":false,"propInt":1234567878910111212,"propInt8":123,"propInt16":12349,"propInt32":1234567891,"propInt64":1234567878910111213,"propUint":12345678789101112138,"propUint8":255,"propUint16":12345,"propUint32":1234567891,"propUint64":12345678789101112139,"propFloat32":21.232426,"propFloat64":2799999999888.2827,"propString":"thirty two thirty four","propStruct":{"propName":["a name","another name","another"],"ps":["test pointer string",null,"test pointer string"]},"propEncode":1,"propEncodeP":2,"propEncodenilP":null,"propEncodeS":134}
+	// {"propBool":false,"propInt":1234567878910111212,"propInt8":123,"propInt16":12349,"propInt32":1234567891,"propInt64":1234567878910111213,"propUint":12345678789101112138,"propUint8":255,"propUint16":12345,"propUint32":1234567891,"propUint64":12345678789101112139,"propFloat32":21.232426,"propFloat64":2799999999888.2827,"propString":"thirty two thirty four","propStruct":{"propName":["a name","another name","another"],"ps":["test pointer string",null,"test pointer string"],"propNameEscaped":["one\\two\\,three\"","\"four\\five\\,six\""]},"propEncode":1,"propEncodeP":2,"propEncodenilP":null,"propEncodeS":134}
 }
 
-func ExampleRaw() {
+func Example_testStruct2() {
 
 	type testStruct2 struct {
 		Raw  []byte `json:"raw,raw"`
@@ -135,6 +138,35 @@ func Test_NilStruct(t *testing.T) {
 	resultJSON := buf.String()
 	if resultJSON != wantJSON {
 		t.Errorf("Test_NilStruct Failed: want JSON: " + wantJSON + " got JSON:" + resultJSON)
+	}
+}
+
+type StructWithEscapes struct {
+	String      string   `json:"str,escape"`
+	StringArray []string `json:"str-array,escape"`
+}
+
+func Test_StructWithEscapes(t *testing.T) {
+	es := StructWithEscapes{
+		String:      "one\\two\\,three\"",
+		StringArray: []string{"one\\two", "three\\,four"},
+	}
+
+	wantJSON := `{"str":"one\\two\\,three\"","str-array":["one\\two","three\\,four"]}`
+
+	var enc = NewStructEncoder(StructWithEscapes{})
+	buf := NewBufferFromPool()
+	enc.Marshal(&es, buf)
+	resultJSON := buf.String()
+
+	// Ensure JSON is valid.
+	if !json.Valid([]byte(resultJSON)) {
+		t.Errorf("Not valid JSON:" + resultJSON)
+	}
+
+	// Compare result
+	if resultJSON != wantJSON {
+		t.Errorf("Test_StructWithScapes Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
 	}
 }
 
@@ -343,6 +375,26 @@ func BenchmarkSlice(b *testing.B) {
 	}
 }
 
+func BenchmarkSliceEscape(b *testing.B) {
+
+	ss := []string{
+		"a name",
+		"another name",
+		"another",
+		"and one more",
+		"last one, promise",
+	}
+
+	var enc = NewSliceEncoder([]EscapeString{})
+
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		buf := NewBufferFromPool()
+		enc.Marshal(&ss, buf)
+		buf.ReturnToPool()
+	}
+}
+
 func BenchmarkSliceStdLib(b *testing.B) {
 	ss := []string{
 		"a name",
@@ -384,11 +436,13 @@ var fake = &all{
 	PropFloat64: 2799999999888.28293031999999,
 	PropString:  "thirty two thirty four",
 	PropStruct: struct {
-		PropNames []string  `json:"propName"`
-		PropPs    []*string `json:"ps"`
+		PropNames        []string  `json:"propName"`
+		PropPs           []*string `json:"ps"`
+		PropNamesEscaped []string  `json:"propNameEscaped,escape"`
 	}{
-		PropNames: []string{"a name", "another name", "another"},
-		PropPs:    []*string{&s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s},
+		PropNames:        []string{"a name", "another name", "another"},
+		PropPs:           []*string{&s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s, nil, &s},
+		PropNamesEscaped: []string{"one\\two\\,three\"", "\"four\\five\\,six\""},
 	},
 }
 
@@ -441,6 +495,51 @@ func NewSmallPayload() *SmallPayload {
 		V:    6,
 	}
 	return s
+}
+
+var smallPayload = NewSmallPayload()
+
+func BenchmarkSmallPayload(b *testing.B) {
+
+	e := NewStructEncoder(SmallPayload{})
+
+	buf := NewBufferFromPool()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.Marshal(smallPayload, buf)
+		buf.Reset()
+	}
+}
+
+func BenchmarkSmallPayloadStdLib(b *testing.B) {
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		json.Marshal(smallPayload)
+	}
+}
+
+var largePayload = NewLargePayload()
+
+func BenchmarkLargePayload(b *testing.B) {
+
+	e := NewStructEncoder(LargePayload{})
+	buf := NewBufferFromPool()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.Marshal(largePayload, buf)
+		buf.Reset()
+	}
+}
+
+func BenchmarkLargePayloadStdLib(b *testing.B) {
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		json.Marshal(largePayload)
+	}
 }
 
 //
