@@ -89,7 +89,7 @@ func ptrFloat64ToBuf(v unsafe.Pointer, b *Buffer) {
 }
 
 func ptrStringToBuf(v unsafe.Pointer, b *Buffer) {
-	b.Write(*(*[]byte)(v))
+	b.WriteString(*(*string)(v))
 }
 
 func ptrTimeToBuf(v unsafe.Pointer, b *Buffer) {
