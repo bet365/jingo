@@ -25,9 +25,15 @@ func (b *Buffer) Write(v []byte) (int, error) {
 	return len(v), nil
 }
 
+// WriteString writes a string to the buffer
+func (b *Buffer) WriteString(v string) {
+	b.Bytes = append(b.Bytes, v...)
+}
+
 // WriteByte writes a single byte into the output buffer
-func (b *Buffer) WriteByte(v byte) {
+func (b *Buffer) WriteByte(v byte) error {
 	b.Bytes = append(b.Bytes, v)
+	return nil
 }
 
 // Reset allows this to be reused by emptying

@@ -631,10 +631,3 @@ type unsafeke struct {
 	e unsafe.Pointer
 }
 
-// src/reflect/value.go
-// sliceHeader is a safe version of SliceHeader used within this package.
-type sliceHeader struct {
-	Data unsafe.Pointer
-	Len  int
-	Cap  int
-}
