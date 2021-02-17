@@ -39,8 +39,13 @@ func NewSliceEncoderWithConfig(t interface{}, cfg Config) *SliceEncoder {
 	e.tt = reflect.TypeOf(t)
 	e.offset = e.tt.Elem().Size()
 
-	if e.tt.Elem() == timeType {
+	// see if we can select based on a specific type
+	switch e.tt.Elem() {
+	case timeType:
 		e.timeInstr()
+		return e
+	case escapeStringType:
+		e.stringInstr(ptrEscapeStringToBuf)
 		return e
 	}
 
@@ -56,13 +61,17 @@ func NewSliceEncoderWithConfig(t interface{}, cfg Config) *SliceEncoder {
 		e.mapInstr()
 
 	case reflect.String:
-		e.stringInstr()
+		e.stringInstr(ptrStringToBuf)
 
 	case reflect.Ptr:
 
 		/// which pointer type
-		if e.tt.Elem().Elem() == timeType {
+		switch e.tt.Elem().Elem() {
+		case timeType:
 			e.ptrTimeInstr()
+			return e
+		case escapeStringType:
+			e.ptrStringInstr(ptrEscapeStringToBuf)
 			return e
 		}
 
@@ -77,7 +86,7 @@ func NewSliceEncoderWithConfig(t interface{}, cfg Config) *SliceEncoder {
 			e.ptrMapInstr()
 
 		case reflect.String:
-			e.ptrStringInstr()
+			e.ptrStringInstr(ptrStringToBuf)
 
 		default:
 			e.ptrOtherInstr()
@@ -96,17 +105,25 @@ var (
 	zero = uintptr(0)
 )
 
+// sliceHeader is a replacement for reflect.SliceHeader which forces the uintptr conversion to be done inline to
+// play nice with vet and the unsafe conversion rules
+type sliceHeader struct {
+	Data unsafe.Pointer
+	Len  int
+	Cap  int
+}
+
 func (e *SliceEncoder) sliceInstr() {
 	enc := NewSliceEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Interface(), e.cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
-			s := unsafe.Pointer(sl.Data + (i * e.offset))
+			s := unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))
 			enc.Marshal(s, w)
 		}
 
@@ -119,12 +136,12 @@ func (e *SliceEncoder) structInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
-			s := unsafe.Pointer(sl.Data + (i * e.offset))
+			s := unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))
 			enc.Marshal(s, w)
 		}
 
@@ -150,11 +167,11 @@ func (e *SliceEncoder) mapInstr() {
 	}
 }
 
-func (e *SliceEncoder) stringInstr() {
+func (e *SliceEncoder) stringInstr(conv func(unsafe.Pointer, *Buffer)) {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 
 			if i == 0 {
@@ -165,7 +182,7 @@ func (e *SliceEncoder) stringInstr() {
 				w.Write([]byte(`","`))
 			}
 
-			ptrStringToBuf(unsafe.Pointer(sl.Data+(i*e.offset)), w)
+			conv(unsafe.Pointer(uintptr(sl.Data)+(i*e.offset)), w)
 
 			if i == uintptr(sl.Len)-1 {
 				w.WriteByte('"')
@@ -186,12 +203,12 @@ func (e *SliceEncoder) otherInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
-			conv(unsafe.Pointer(sl.Data+(i*e.offset)), w)
+			conv(unsafe.Pointer(uintptr(sl.Data)+(i*e.offset)), w)
 		}
 
 		w.WriteByte(']')
@@ -202,13 +219,13 @@ func (e *SliceEncoder) timeInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
 			w.WriteByte('"')
-			ptrTimeToBuf(unsafe.Pointer(sl.Data+(i*e.offset)), w)
+			ptrTimeToBuf(unsafe.Pointer(uintptr(sl.Data)+(i*e.offset)), w)
 			w.WriteByte('"')
 		}
 
@@ -221,13 +238,13 @@ func (e *SliceEncoder) ptrSliceInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
 
-			s := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(sl.Data + (i * e.offset))))
+			s := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))))
 			if s == unsafe.Pointer(nil) {
 				w.Write(null)
 				continue
@@ -244,13 +261,13 @@ func (e *SliceEncoder) ptrStrctInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
 
-			s := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(sl.Data + (i * e.offset))))
+			s := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))))
 			if s == unsafe.Pointer(nil) {
 				w.Write(null)
 				continue
@@ -285,23 +302,23 @@ func (e *SliceEncoder) ptrMapInstr() {
 	}
 }
 
-func (e *SliceEncoder) ptrStringInstr() {
+func (e *SliceEncoder) ptrStringInstr(conv func(unsafe.Pointer, *Buffer)) {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
 
-			s := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(sl.Data + (i * e.offset))))
+			s := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))))
 			if s == unsafe.Pointer(nil) {
 				w.Write(null)
 				continue
 			}
 			w.WriteByte('"')
-			ptrStringToBuf(s, w)
+			conv(s, w)
 			w.WriteByte('"')
 		}
 
@@ -319,13 +336,13 @@ func (e *SliceEncoder) ptrOtherInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
 
-			s := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(sl.Data + (i * e.offset))))
+			s := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))))
 			if s == unsafe.Pointer(nil) {
 				w.Write(null)
 				continue
@@ -341,13 +358,13 @@ func (e *SliceEncoder) ptrTimeInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
-		sl := *(*reflect.SliceHeader)(v)
+		sl := *(*sliceHeader)(v)
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
 				w.WriteByte(',')
 			}
 
-			s := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(sl.Data + (i * e.offset))))
+			s := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))))
 			if s == unsafe.Pointer(nil) {
 				w.Write(null)
 				continue
