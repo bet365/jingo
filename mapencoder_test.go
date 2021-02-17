@@ -115,6 +115,100 @@ func TestMapEncoder_key_marshaltext(t *testing.T) {
 	}
 }
 
+func TestMapEncoder_key_escape(t *testing.T) {
+
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+
+	enc := NewMapEncoderWithConfig(map[string]EscapeString{}, cfg)
+
+	tests := []struct {
+		name string
+		v    map[string]EscapeString
+		want []byte
+	}{
+		{
+			"One",
+			map[string]EscapeString{
+				"v1": "\"four\\five\\,six\"",
+			},
+			[]byte(`{"v1":"\"four\\five\\,six\""}`),
+		},
+		{
+			"Many",
+			map[string]EscapeString{
+				"v1": "\"four\\five\\,six\"",
+				"v2": "\"four\\five\\,six\"",
+				"v3": "\"four\\five\\,six\"",
+			},
+			[]byte(`{"v1":"\"four\\five\\,six\"","v2":"\"four\\five\\,six\"","v3":"\"four\\five\\,six\""}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			buf := NewBufferFromPool()
+			defer buf.ReturnToPool()
+
+			enc.Marshal(&tt.v, buf)
+
+			if !bytes.Equal(tt.want, buf.Bytes) {
+				t.Errorf("\nwant:\n%s\ngot:\n%s\n", tt.want, buf.Bytes)
+			}
+		})
+	}
+}
+
+func TestMapEncoder_key_escape_field(t *testing.T) {
+
+	cfg := DefaultConfig()
+	cfg.SetSortMapKeys(true)
+
+	type str struct {
+		F map[string]string `json:"f,escape"`
+	}
+
+	enc := NewStructEncoderWithConfig(str{}, cfg)
+
+	tests := []struct {
+		name string
+		v    str
+		want []byte
+	}{
+		{
+			"One",
+			str{map[string]string{
+				"v1": "\"four\\five\\,six\"",
+			}},
+			[]byte(`{"f":{"v1":"\"four\\five\\,six\""}}`),
+		},
+		{
+			"Many",
+			str{map[string]string{
+				"v1": "\"four\\five\\,six\"",
+				"v2": "\"four\\five\\,six\"",
+				"v3": "\"four\\five\\,six\"",
+			}},
+			[]byte(`{"f":{"v1":"\"four\\five\\,six\"","v2":"\"four\\five\\,six\"","v3":"\"four\\five\\,six\""}}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			buf := NewBufferFromPool()
+			defer buf.ReturnToPool()
+
+			enc.Marshal(&tt.v, buf)
+
+			if !bytes.Equal(tt.want, buf.Bytes) {
+				t.Errorf("\nwant:\n%s\ngot:\n%s\n", tt.want, buf.Bytes)
+			}
+		})
+	}
+}
+
 func TestMapEncoder_key_time(t *testing.T) {
 
 	cfg := DefaultConfig()

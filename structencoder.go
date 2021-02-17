@@ -173,11 +173,25 @@ func (e *StructEncoder) optInstrRaw() {
 }
 
 func (e *StructEncoder) optInstrEscape() {
+
+	if e.f.Type.Kind() == reflect.Map {
+		e.flunk()
+
+		// because the field has been annotated as map[]string with the ,encoder option we need to swap to the escapeStringType internally
+		enc := NewMapEncoderWithConfig(reflect.New(reflect.MapOf(e.f.Type.Key(), escapeStringType)).Elem().Interface(), e.cfg)
+		f := e.f
+		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
+			enc.Marshal(em, w)
+		})
+		return
+	}
+
 	if e.f.Type.Kind() == reflect.Slice {
 		e.flunk()
 
 		/// create an escape string encoder internally instead of mirroring the struct, so people only need to pass the ,escape opt instead
-		enc := NewSliceEncoder([]EscapeString{})
+		enc := NewSliceEncoderWithConfig([]EscapeString{}, e.cfg)
 		f := e.f
 		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)

@@ -61,6 +61,23 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 		e.ttElem = e.ttElem.Elem()
 	}
 
+	var econv func(unsafe.Pointer, *Buffer)
+
+	// see if we can select based on a specific type
+	switch e.ttElem {
+	case escapeStringType:
+		if tt.Key().Kind() == reflect.Ptr {
+			econv = e.ptrStrElemInstr(ptrEscapeStringToBuf)
+		} else {
+			econv = func(v unsafe.Pointer, w *Buffer) {
+				w.WriteByte('"')
+				ptrEscapeStringToBuf(v, w)
+				w.WriteByte('"')
+			}
+		}
+		goto KeyInstr
+	}
+
 	if tt.Key().Kind() == reflect.String && tt.Elem().Kind() == reflect.String {
 
 		// With optimization:
@@ -92,8 +109,6 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 		e.instruction = e.strStrInstr()
 		return e
 	}
-
-	var econv func(unsafe.Pointer, *Buffer)
 
 	if tt.Elem().Implements(textMarshalerType) {
 		if tt.Elem().Kind() == reflect.Ptr {
@@ -161,7 +176,7 @@ func NewMapEncoderWithConfig(t interface{}, cfg Config) *MapEncoder {
 			})
 
 		case reflect.String:
-			econv = e.ptrStrElemInstr()
+			econv = e.ptrStrElemInstr(ptrStringToBuf)
 
 		case reflect.Bool,
 			reflect.Int,
@@ -262,7 +277,7 @@ KeyInstr:
 }
 
 // ptrStrElemInstr creates an instruction to read from a pointer field we're marshaling
-func (e *MapEncoder) ptrStrElemInstr() func(unsafe.Pointer, *Buffer) {
+func (e *MapEncoder) ptrStrElemInstr(conv func(unsafe.Pointer, *Buffer)) func(unsafe.Pointer, *Buffer) {
 	return func(v unsafe.Pointer, w *Buffer) {
 
 		p := *(*unsafe.Pointer)(v)
@@ -272,7 +287,7 @@ func (e *MapEncoder) ptrStrElemInstr() func(unsafe.Pointer, *Buffer) {
 		}
 
 		w.WriteByte('"')
-		ptrStringToBuf(p, w)
+		conv(p, w)
 		w.WriteByte('"')
 	}
 }
@@ -630,4 +645,3 @@ type unsafeke struct {
 	k sliceHeader
 	e unsafe.Pointer
 }
-
