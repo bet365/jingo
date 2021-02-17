@@ -88,6 +88,7 @@ func ptrFloat64ToBuf(v unsafe.Pointer, b *Buffer) {
 	b.Bytes = strconv.AppendFloat(b.Bytes, *(*float64)(v), 'f', -1, 64)
 }
 
+//go:nocheckptr
 func ptrStringToBuf(v unsafe.Pointer, b *Buffer) {
 	b.Write(*(*[]byte)(v))
 }

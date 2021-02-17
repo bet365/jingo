@@ -17,6 +17,7 @@ type SliceEncoder struct {
 	instruction func(t unsafe.Pointer, w *Buffer)
 	tt          reflect.Type
 	offset      uintptr
+	cfg         Config
 }
 
 // Marshal executes the instruction set built up by NewSliceEncoder
@@ -28,7 +29,12 @@ func (e *SliceEncoder) Marshal(s interface{}, w *Buffer) {
 
 // NewSliceEncoder builds a new SliceEncoder
 func NewSliceEncoder(t interface{}) *SliceEncoder {
-	e := &SliceEncoder{}
+	return NewSliceEncoderWithConfig(t, DefaultConfig())
+}
+
+// NewSliceEncoderWithConfig builds a new SliceEncoder using Config provided.
+func NewSliceEncoderWithConfig(t interface{}, cfg Config) *SliceEncoder {
+	e := &SliceEncoder{cfg: cfg}
 
 	e.tt = reflect.TypeOf(t)
 	e.offset = e.tt.Elem().Size()
@@ -45,6 +51,9 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 
 	case reflect.Struct:
 		e.structInstr()
+
+	case reflect.Map:
+		e.mapInstr()
 
 	case reflect.String:
 		e.stringInstr()
@@ -63,6 +72,9 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 
 		case reflect.Struct:
 			e.ptrStrctInstr()
+
+		case reflect.Map:
+			e.ptrMapInstr()
 
 		case reflect.String:
 			e.ptrStringInstr()
@@ -85,7 +97,7 @@ var (
 )
 
 func (e *SliceEncoder) sliceInstr() {
-	enc := NewSliceEncoder(reflect.New(e.tt.Elem()).Elem().Interface())
+	enc := NewSliceEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Interface(), e.cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
@@ -103,7 +115,7 @@ func (e *SliceEncoder) sliceInstr() {
 }
 
 func (e *SliceEncoder) structInstr() {
-	enc := NewStructEncoder(reflect.New(e.tt.Elem()).Elem().Interface())
+	enc := NewStructEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Interface(), e.cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
@@ -113,6 +125,24 @@ func (e *SliceEncoder) structInstr() {
 				w.WriteByte(',')
 			}
 			s := unsafe.Pointer(sl.Data + (i * e.offset))
+			enc.Marshal(s, w)
+		}
+
+		w.WriteByte(']')
+	}
+}
+
+func (e *SliceEncoder) mapInstr() {
+	enc := NewMapEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Interface(), e.cfg)
+	e.instruction = func(v unsafe.Pointer, w *Buffer) {
+		w.WriteByte('[')
+
+		sl := *(*sliceHeader)(v)
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			if i > zero {
+				w.WriteByte(',')
+			}
+			s := unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))
 			enc.Marshal(s, w)
 		}
 
@@ -187,7 +217,7 @@ func (e *SliceEncoder) timeInstr() {
 }
 
 func (e *SliceEncoder) ptrSliceInstr() {
-	enc := NewSliceEncoder(reflect.New(e.tt.Elem()).Elem().Elem().Interface())
+	enc := NewSliceEncoderWithConfig(reflect.New(e.tt.Elem()).Elem().Elem().Interface(), e.cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
@@ -210,7 +240,7 @@ func (e *SliceEncoder) ptrSliceInstr() {
 }
 
 func (e *SliceEncoder) ptrStrctInstr() {
-	enc := NewStructEncoder(reflect.New(e.tt.Elem().Elem()).Elem().Interface())
+	enc := NewStructEncoderWithConfig(reflect.New(e.tt.Elem().Elem()).Elem().Interface(), e.cfg)
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		w.WriteByte('[')
 
@@ -221,6 +251,29 @@ func (e *SliceEncoder) ptrStrctInstr() {
 			}
 
 			s := unsafe.Pointer(*(*uintptr)(unsafe.Pointer(sl.Data + (i * e.offset))))
+			if s == unsafe.Pointer(nil) {
+				w.Write(null)
+				continue
+			}
+			enc.Marshal(s, w)
+		}
+
+		w.WriteByte(']')
+	}
+}
+
+func (e *SliceEncoder) ptrMapInstr() {
+	enc := NewMapEncoderWithConfig(reflect.New(e.tt.Elem().Elem()).Elem().Interface(), e.cfg)
+	e.instruction = func(v unsafe.Pointer, w *Buffer) {
+		w.WriteByte('[')
+
+		sl := *(*sliceHeader)(v)
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			if i > zero {
+				w.WriteByte(',')
+			}
+
+			s := *(*unsafe.Pointer)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))
 			if s == unsafe.Pointer(nil) {
 				w.Write(null)
 				continue

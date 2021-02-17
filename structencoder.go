@@ -24,6 +24,7 @@ type StructEncoder struct {
 	i            int                                 // iter
 	cb           Buffer                              // side buffer for static data
 	cpos         int                                 // side buffer position
+	cfg          Config
 }
 
 // Marshal executes the instructions for a given type and writes the resulting
@@ -36,9 +37,14 @@ func (e *StructEncoder) Marshal(s interface{}, w *Buffer) {
 	}
 }
 
-// NewStructEncoder compiles a set of instructions for marhsaling a struct shape to a JSON document.
+// NewStructEncoder compiles a set of instructions for marshaling a struct shape to a JSON document.
 func NewStructEncoder(t interface{}) *StructEncoder {
-	e := &StructEncoder{}
+	return NewStructEncoderWithConfig(t, DefaultConfig())
+}
+
+// NewStructEncoderWithConfig compiles a set of instructions for marshaling a struct shape to a JSON document using Config provided.
+func NewStructEncoderWithConfig(t interface{}, cfg Config) *StructEncoder {
+	e := &StructEncoder{cfg: cfg}
 	e.t = t
 	tt := reflect.TypeOf(t)
 
@@ -159,6 +165,7 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 	e.flunk()
 
 	return e
+
 }
 
 // chunk writes a chunk of body data to the chunk buffer. only for writing static
@@ -236,7 +243,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 
 		e.flunk()
 
-		enc := NewSliceEncoder(reflect.ValueOf(e.t).Field(e.i).Interface())
+		enc := NewSliceEncoderWithConfig(reflect.ValueOf(e.t).Field(e.i).Interface(), e.cfg)
 		f := e.f
 		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
@@ -264,7 +271,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 
 			/// now cater for it being a pointer to a struct
 			var inf = reflect.New(reflect.TypeOf(e.t).Field(e.i).Type.Elem()).Elem().Interface()
-			enc := NewStructEncoder(inf)
+			enc := NewStructEncoderWithConfig(inf, e.cfg)
 			// now create an instruction to marshal the field
 			f := e.f
 			e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
@@ -279,7 +286,39 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		}
 
 		// build a new StructEncoder for the type
-		enc := NewStructEncoder(reflect.ValueOf(e.t).Field(e.i).Interface())
+		enc := NewStructEncoderWithConfig(reflect.ValueOf(e.t).Field(e.i).Interface(), e.cfg)
+		// now create another instruction which calls marshal on the struct, passing our writer
+		f := e.f
+		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
+			enc.Marshal(em, w)
+		})
+		return
+
+	case reflect.Map:
+		// create an instruction for the field name (as per val)
+		e.flunk()
+
+		if e.f.Type.Kind() == reflect.Ptr {
+
+			/// now cater for it being a pointer to a struct
+			var inf = reflect.New(reflect.TypeOf(e.t).Field(e.i).Type.Elem()).Elem().Interface()
+			enc := NewMapEncoderWithConfig(inf, e.cfg)
+			// now create an instruction to marshal the field
+			f := e.f
+			e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+				var em interface{} = *(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset))
+				if em == unsafe.Pointer(nil) {
+					w.Write(null)
+					return
+				}
+				enc.Marshal(em, w)
+			})
+			return
+		}
+
+		// build a new MapEncoder for the type
+		enc := NewMapEncoderWithConfig(reflect.ValueOf(e.t).Field(e.i).Interface(), e.cfg)
 		// now create another instruction which calls marshal on the struct, passing our writer
 		f := e.f
 		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
@@ -289,7 +328,6 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		return
 
 	case reflect.Invalid,
-		reflect.Map,
 		reflect.Interface,
 		reflect.Complex64,
 		reflect.Complex128,
