@@ -15,24 +15,62 @@ import (
 	"unsafe"
 )
 
+// instruction describes the different ways we can execute a single instruction at runtime.
+// static, leapFun/offset, fun are mutually exclusive. we've used a concrete type for speed.
+type instruction struct {
+	static  []byte                        // provides a fast path for writing static chunks without needing an instruction function
+	kind    int                           // used to switch special paths in Marshal, like string fast path
+	offset  uintptr                       // used in conjunction with leapFun
+	leapFun func(unsafe.Pointer, *Buffer) // provides a fast path for simple write & avoids wrapping function to capture offset
+	fun     func(unsafe.Pointer, *Buffer) // full instruction function for when the approaches above fail
+}
+
+const (
+	kindNormal = iota
+	kindStringField
+	kindStatic
+	kindInt
+)
+
+// iface describes the memory footprint of interface{}
+type iface struct {
+	Type, Data unsafe.Pointer
+}
+
 // StructEncoder stores a set of instructions for converting a struct to a json document. It's
 // useless to create an instance of this outside of `NewStructEncoder`.
 type StructEncoder struct {
-	instructions []func(t unsafe.Pointer, w *Buffer) // the instructionset to be executed during Marshal
-	f            reflect.StructField                 // current field
-	t            interface{}                         // type
-	i            int                                 // iter
-	cb           Buffer                              // side buffer for static data
-	cpos         int                                 // side buffer position
+	instructions []instruction       // the instructionset to be executed during Marshal
+	f            reflect.StructField // current field
+	t            interface{}         // type
+	i            int                 // iter
+	cb           Buffer              // side buffer for static data
+	cpos         int                 // side buffer position
 }
 
 // Marshal executes the instructions for a given type and writes the resulting
 // json document to the io.Writer provided
 func (e *StructEncoder) Marshal(s interface{}, w *Buffer) {
 
-	p := unsafe.Pointer(reflect.ValueOf(s).Pointer())
-	for i, l := 0, len(e.instructions); i < l; i++ {
-		e.instructions[i](p, w)
+	p := (*(*iface)(unsafe.Pointer(&s))).Data
+
+	for i := 0; i < len(e.instructions); i++ {
+
+		if e.instructions[i].kind == kindStatic { // static data fast path
+			w.Write(e.instructions[i].static)
+			continue
+		} else if e.instructions[i].kind == kindStringField { // string fields fast path, allows inlining of whole write
+			ptrStringToBuf(unsafe.Pointer(uintptr(p)+e.instructions[i].offset), w)
+			continue
+		} else if e.instructions[i].kind == kindInt { // int fields fast path, allows inlining of whole write
+			ptrIntToBuf(unsafe.Pointer(uintptr(p)+e.instructions[i].offset), w)
+			continue
+		} else if e.instructions[i].leapFun != nil { // simple 'conv' function fast path
+			e.instructions[i].leapFun(unsafe.Pointer(uintptr(p)+e.instructions[i].offset), w)
+			continue
+		}
+
+		e.instructions[i].fun(p, w) // all other instruction types
 	}
 }
 
@@ -99,6 +137,10 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 	e.flunk()
 
 	return e
+}
+
+func (e *StructEncoder) appendInstructionFun(fun func(unsafe.Pointer, *Buffer)) {
+	e.instructions = append(e.instructions, instruction{fun: fun})
 }
 
 func (e *StructEncoder) optInstrStringer() {
@@ -172,7 +214,7 @@ func (e *StructEncoder) optInstrEscape() {
 		/// create an escape string encoder internally instead of mirroring the struct, so people only need to pass the ,escape opt instead
 		enc := NewSliceEncoder([]EscapeString{})
 		f := e.f
-		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+		e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
 			enc.Marshal(em, w)
 		})
@@ -205,17 +247,25 @@ func (e *StructEncoder) flunk() {
 		return
 	}
 
-	e.instructions = append(e.instructions, func(_ unsafe.Pointer, w *Buffer) {
-		w.Write(bs)
-	})
+	e.instructions = append(e.instructions, instruction{static: bs, kind: kindStatic})
 }
 
 /// valueInst works out the conversion function we need for `k` and creates an instruction to write it to the buffer
 func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer, *Buffer))) {
 
 	switch k {
+
+	case reflect.Int:
+
+		/// fast path for int fields
+		if e.f.Type.Kind() == reflect.Ptr {
+			instr(ptrIntToBuf)
+			return
+		}
+		e.flunk()
+		e.instructions = append(e.instructions, instruction{offset: e.f.Offset, kind: kindInt})
+
 	case reflect.Bool,
-		reflect.Int,
 		reflect.Int8,
 		reflect.Int16,
 		reflect.Int32,
@@ -252,7 +302,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 			e.flunk()
 			f := e.f
 			i := i
-			e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+			e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 				conv(unsafe.Pointer(uintptr(v)+f.Offset+(uintptr(i)*offset)), w)
 			})
 		}
@@ -265,7 +315,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 
 		enc := NewSliceEncoder(reflect.ValueOf(e.t).Field(e.i).Interface())
 		f := e.f
-		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+		e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
 			enc.Marshal(em, w)
 		})
@@ -280,7 +330,10 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 
 		// otherwise a standard quoted print instruction
 		e.chunk(`"`)
-		instr(ptrStringToBuf)
+
+		/// fast path for strings
+		e.flunk() // flush any chunk data we've buffered
+		e.instructions = append(e.instructions, instruction{offset: e.f.Offset, kind: kindStringField})
 		e.chunk(`"`)
 
 	case reflect.Struct:
@@ -294,7 +347,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 			enc := NewStructEncoder(inf)
 			// now create an instruction to marshal the field
 			f := e.f
-			e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+			e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 				var em interface{} = unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset)))
 				if em == unsafe.Pointer(nil) {
 					w.Write(null)
@@ -309,7 +362,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		enc := NewStructEncoder(reflect.ValueOf(e.t).Field(e.i).Interface())
 		// now create another instruction which calls marshal on the struct, passing our writer
 		f := e.f
-		e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+		e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
 			enc.Marshal(em, w)
 		})
@@ -333,11 +386,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 func (e *StructEncoder) val(conv func(unsafe.Pointer, *Buffer)) {
 
 	e.flunk() // flush any chunk data we've buffered
-
-	f := e.f
-	e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
-		conv(unsafe.Pointer(uintptr(v)+f.Offset), w)
-	})
+	e.instructions = append(e.instructions, instruction{leapFun: conv, offset: e.f.Offset})
 }
 
 // ptrval creates an instruction to read from a pointer field we're marshaling
@@ -349,7 +398,7 @@ func (e *StructEncoder) ptrval(conv func(unsafe.Pointer, *Buffer)) {
 	null := []byte("null")
 
 	f := e.f
-	e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+	e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 
 		p := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset)))
 		if p == unsafe.Pointer(nil) {
@@ -368,7 +417,7 @@ func (e *StructEncoder) ptrstringval(conv func(unsafe.Pointer, *Buffer)) {
 	null := []byte("null")
 
 	f := e.f
-	e.instructions = append(e.instructions, func(v unsafe.Pointer, w *Buffer) {
+	e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 
 		p := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset)))
 		if p == unsafe.Pointer(nil) {
