@@ -323,7 +323,7 @@ func Test_Time(t *testing.T) {
 		PtrSliceTime: []*time.Time{&d3},
 	}
 
-	wantJSON := `{"time":2000-09-17T20:04:26Z,"ptrTime":2001-09-17T20:04:26Z,"sliceTime":["2002-09-17T20:04:26Z"],"ptrSliceTime":["2003-09-17T20:04:26Z"]}`
+	wantJSON := `{"time":"2000-09-17T20:04:26Z","ptrTime":"2001-09-17T20:04:26Z","sliceTime":["2002-09-17T20:04:26Z"],"ptrSliceTime":["2003-09-17T20:04:26Z"]}`
 
 	var enc = NewStructEncoder(TimeObject{})
 
