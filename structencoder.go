@@ -118,9 +118,13 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 
 		/// time is a type of struct, not a kind, so somewhat of a special case here.
 		case e.f.Type == timeType:
+			e.chunk(`"`)
 			e.val(ptrTimeToBuf)
+			e.chunk(`"`)
 		case e.f.Type.Kind() == reflect.Ptr && timeType == reflect.TypeOf(e.t).Field(e.i).Type.Elem():
+			e.chunk(`"`)
 			e.ptrval(ptrTimeToBuf)
+			e.chunk(`"`)
 
 		// write the value instruction depending on type
 		case e.f.Type.Kind() == reflect.Ptr:
