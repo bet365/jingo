@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -148,11 +149,14 @@ type StructWithEscapes struct {
 
 func Test_StructWithEscapes(t *testing.T) {
 	es := StructWithEscapes{
-		String:      "one\\two\\,three\"",
-		StringArray: []string{"one\\two", "three\\,four"},
+		String: `one\two\,three,
+		four"`, //N.B. includes 2 indentation tabs
+		StringArray: []string{`one\two`, `three\,four,
+		five`, //N.B. includes 2 indentation tabs
+		},
 	}
 
-	wantJSON := `{"str":"one\\two\\,three\"","str-array":["one\\two","three\\,four"]}`
+	wantJSON := `{"str":"one\\two\\,three,\n\t\tfour\"","str-array":["one\\two","three\\,four,\n\t\tfive"]}`
 
 	var enc = NewStructEncoder(StructWithEscapes{})
 	buf := NewBufferFromPool()
@@ -167,6 +171,13 @@ func Test_StructWithEscapes(t *testing.T) {
 	// Compare result
 	if resultJSON != wantJSON {
 		t.Errorf("Test_StructWithScapes Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+	}
+
+	andBackAgain := StructWithEscapes{}
+	json.Unmarshal([]byte(resultJSON), &andBackAgain)
+
+	if !reflect.DeepEqual(es, andBackAgain) {
+		t.Errorf("Test_StructWithScapes Failed: want: %+v got: %+v", es, andBackAgain)
 	}
 }
 
