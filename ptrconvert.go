@@ -110,6 +110,27 @@ func ptrEscapeStringToBuf(v unsafe.Pointer, w *Buffer) {
 
 			w.WriteByte('\\')
 			w.WriteByte(bs[i])
+		case '\n':
+			if pos < i {
+				w.WriteString(bs[pos:i])
+			}
+			pos = i + 1
+
+			w.WriteString(`\n`)
+		case '\r':
+			if pos < i {
+				w.WriteString(bs[pos:i])
+			}
+			pos = i + 1
+
+			w.WriteString(`\r`)
+		case '\t':
+			if pos < i {
+				w.WriteString(bs[pos:i])
+			}
+			pos = i + 1
+
+			w.WriteString(`\t`)
 		}
 	}
 
