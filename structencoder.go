@@ -122,9 +122,7 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 			e.val(ptrTimeToBuf)
 			e.chunk(`"`)
 		case e.f.Type.Kind() == reflect.Ptr && timeType == reflect.TypeOf(e.t).Field(e.i).Type.Elem():
-			e.chunk(`"`)
-			e.ptrval(ptrTimeToBuf)
-			e.chunk(`"`)
+			e.ptrstringval(ptrTimeToBuf)
 
 		// write the value instruction depending on type
 		case e.f.Type.Kind() == reflect.Ptr:

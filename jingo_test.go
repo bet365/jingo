@@ -314,10 +314,12 @@ func BenchmarkUnicodeLargeStdLib(b *testing.B) {
 }
 
 type TimeObject struct {
-	Time         time.Time    `json:"time"`
-	PtrTime      *time.Time   `json:"ptrTime"`
-	SliceTime    []time.Time  `json:"sliceTime"`
-	PtrSliceTime []*time.Time `json:"ptrSliceTime"`
+	Time             time.Time    `json:"time"`
+	PtrTime          *time.Time   `json:"ptrTime"`
+	NullPtrTime      *time.Time   `json:"nullPtrTime"`
+	SliceTime        []time.Time  `json:"sliceTime"`
+	PtrSliceTime     []*time.Time `json:"ptrSliceTime"`
+	NullPtrSliceTime []*time.Time `json:"nullPtrSliceTime"`
 }
 
 func Test_Time(t *testing.T) {
@@ -328,13 +330,15 @@ func Test_Time(t *testing.T) {
 	d3 := time.Date(2003, 9, 17, 20, 4, 26, 0, time.UTC)
 
 	to := TimeObject{
-		Time:         d0,
-		PtrTime:      &d1,
-		SliceTime:    []time.Time{d2},
-		PtrSliceTime: []*time.Time{&d3},
+		Time:             d0,
+		PtrTime:          &d1,
+		NullPtrTime:      nil,
+		SliceTime:        []time.Time{d2},
+		PtrSliceTime:     []*time.Time{&d3},
+		NullPtrSliceTime: []*time.Time{nil},
 	}
 
-	wantJSON := `{"time":"2000-09-17T20:04:26Z","ptrTime":"2001-09-17T20:04:26Z","sliceTime":["2002-09-17T20:04:26Z"],"ptrSliceTime":["2003-09-17T20:04:26Z"]}`
+	wantJSON := `{"time":"2000-09-17T20:04:26Z","ptrTime":"2001-09-17T20:04:26Z","nullPtrTime":null,"sliceTime":["2002-09-17T20:04:26Z"],"ptrSliceTime":["2003-09-17T20:04:26Z"],"nullPtrSliceTime":[null]}`
 
 	var enc = NewStructEncoder(TimeObject{})
 
