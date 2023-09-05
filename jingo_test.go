@@ -170,14 +170,44 @@ func Test_StructWithEscapes(t *testing.T) {
 
 	// Compare result
 	if resultJSON != wantJSON {
-		t.Errorf("Test_StructWithScapes Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+		t.Errorf("Test_StructWithEscapes Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
 	}
 
 	andBackAgain := StructWithEscapes{}
 	json.Unmarshal([]byte(resultJSON), &andBackAgain)
 
 	if !reflect.DeepEqual(es, andBackAgain) {
-		t.Errorf("Test_StructWithScapes Failed: want: %+v got: %+v", es, andBackAgain)
+		t.Errorf("Test_StructWithEscapes Failed: want: %+v got: %+v", es, andBackAgain)
+	}
+}
+
+func Test_StructWithRecursion(t *testing.T) {
+
+	type structWithRecursion struct {
+		Name  string               `json:"name"`
+		Child *structWithRecursion `json:"child"`
+	}
+
+	v := structWithRecursion{
+		Name: "A",
+		Child: &structWithRecursion{
+			Name: "B",
+			Child: &structWithRecursion{
+				Name:  "C",
+				Child: nil,
+			},
+		},
+	}
+
+	wantJSON := `{"name":"A","child":{"name":"B","child":{"name":"C","child":null}}}`
+
+	var enc = NewStructEncoder(structWithRecursion{})
+	buf := NewBufferFromPool()
+	enc.Marshal(&v, buf)
+
+	resultJSON := buf.String()
+	if resultJSON != wantJSON {
+		t.Errorf("Test_StructWithRecursion Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
 	}
 }
 
@@ -508,8 +538,6 @@ func BenchmarkSliceStdLib(b *testing.B) {
 // var fakeType = LargePayload{}
 // var fake = NewLargePayload()
 
-//
-//
 var s = "test pointer string b"
 var fakeType = all{}
 var fake = &all{

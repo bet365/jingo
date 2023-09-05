@@ -346,7 +346,15 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 
 			/// now cater for it being a pointer to a struct
 			var inf = reflect.New(reflect.TypeOf(e.t).Field(e.i).Type.Elem()).Elem().Interface()
-			enc := NewStructEncoder(inf)
+
+			var enc *StructEncoder
+			if e.t == inf {
+				// handle recursive structs by re-using the current encoder
+				enc = e
+			} else {
+				enc = NewStructEncoder(inf)
+			}
+
 			// now create an instruction to marshal the field
 			f := e.f
 			e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
