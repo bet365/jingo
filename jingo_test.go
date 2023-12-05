@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 	"strconv"
 	"testing"
@@ -30,10 +31,11 @@ type all struct {
 		PropPs           []*string `json:"ps"`
 		PropNamesEscaped []string  `json:"propNameEscaped,escape"`
 	} `json:"propStruct"`
-	PropEncode     encode0  `json:"propEncode,encoder"`
-	PropEncodeP    *encode0 `json:"propEncodeP,encoder"`
-	PropEncodenilP *encode0 `json:"propEncodenilP,encoder"`
-	PropEncodeS    encode1  `json:"propEncodeS,encoder"`
+	PropEncode        encode0       `json:"propEncode,encoder"`
+	PropEncodeP       *encode0      `json:"propEncodeP,encoder"`
+	PropEncodenilP    *encode0      `json:"propEncodenilP,encoder"`
+	PropEncodeS       encode1       `json:"propEncodeS,encoder"`
+	PropJSONMarshaler jsonMarshaler `json:"propJSONMarshaler,encoder"`
 }
 
 type encode0 struct {
@@ -53,6 +55,14 @@ func (e *encode1) JSONEncode(w *Buffer) {
 	for _, v := range *e {
 		w.WriteByte(v.val)
 	}
+}
+
+type jsonMarshaler struct {
+	val []byte
+}
+
+func (j *jsonMarshaler) EncodeJSON(w io.Writer) {
+	w.Write(j.val)
 }
 
 func Example() {
@@ -85,15 +95,16 @@ func Example() {
 			PropPs:           []*string{&s, nil, &s},
 			PropNamesEscaped: []string{"one\\two\\,three\"", "\"four\\five\\,six\""},
 		},
-		PropEncode:  encode0{'1'},
-		PropEncodeP: &encode0{'2'},
-		PropEncodeS: encode1{encode0{'3'}, encode0{'4'}},
+		PropEncode:        encode0{'1'},
+		PropEncodeP:       &encode0{'2'},
+		PropEncodeS:       encode1{encode0{'3'}, encode0{'4'}},
+		PropJSONMarshaler: jsonMarshaler{[]byte("1")},
 	}, b)
 
 	fmt.Println(b.String())
 
 	// Output:
-	// {"propBool":false,"propInt":1234567878910111212,"propInt8":123,"propInt16":12349,"propInt32":1234567891,"propInt64":1234567878910111213,"propUint":12345678789101112138,"propUint8":255,"propUint16":12345,"propUint32":1234567891,"propUint64":12345678789101112139,"propFloat32":21.232426,"propFloat64":2799999999888.2827,"propString":"thirty two thirty four","propStruct":{"propName":["a name","another name","another"],"ps":["test pointer string",null,"test pointer string"],"propNameEscaped":["one\\two\\,three\"","\"four\\five\\,six\""]},"propEncode":1,"propEncodeP":2,"propEncodenilP":null,"propEncodeS":134}
+	// {"propBool":false,"propInt":1234567878910111212,"propInt8":123,"propInt16":12349,"propInt32":1234567891,"propInt64":1234567878910111213,"propUint":12345678789101112138,"propUint8":255,"propUint16":12345,"propUint32":1234567891,"propUint64":12345678789101112139,"propFloat32":21.232426,"propFloat64":2799999999888.2827,"propString":"thirty two thirty four","propStruct":{"propName":["a name","another name","another"],"ps":["test pointer string",null,"test pointer string"],"propNameEscaped":["one\\two\\,three\"","\"four\\five\\,six\""]},"propEncode":1,"propEncodeP":2,"propEncodenilP":null,"propEncodeS":134,"propJSONMarshaler":1}
 }
 
 func Example_testStruct2() {
