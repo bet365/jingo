@@ -9,6 +9,7 @@ package jingo
 
 import (
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"time"
@@ -106,6 +107,13 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 
 		/// support calling .JSONEncode(*Buffer) when the 'encoder' option is passed
 		case opts.Contains("encoder"):
+			// requrie explicit opt-in for JSONMarshaler implementation
+			if _, ok := reflect.PtrTo(reflect.ValueOf(e.t).Field(e.i).Type()).MethodByName("EncodeJSON"); ok {
+				e.optInstrEncoderWriter()
+				break
+			}
+
+			// default to JSONEncoder implementation for any other encoder fields
 			e.optInstrEncoder()
 
 		/// support writing byteslice-like items using 'raw' option.
@@ -192,6 +200,28 @@ func (e *StructEncoder) optInstrEncoder() {
 	}
 }
 
+func (e *StructEncoder) optInstrEncoderWriter() {
+	t := reflect.ValueOf(e.t).Field(e.i).Type()
+	if e.f.Type.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	conv := func(v unsafe.Pointer, w *Buffer) {
+		e, ok := reflect.NewAt(t, v).Interface().(JSONMarshaler)
+		if !ok {
+			w.Write(null)
+			return
+		}
+		e.EncodeJSON(w)
+	}
+
+	if e.f.Type.Kind() == reflect.Ptr {
+		e.ptrval(conv)
+	} else {
+		e.val(conv)
+	}
+}
+
 func (e *StructEncoder) optInstrRaw() {
 	conv := func(v unsafe.Pointer, w *Buffer) {
 		s := *(*string)(v)
@@ -233,7 +263,8 @@ func (e *StructEncoder) optInstrEscape() {
 }
 
 // chunk writes a chunk of body data to the chunk buffer. only for writing static
-//  structure and not dynamic values.
+//
+//	structure and not dynamic values.
 func (e *StructEncoder) chunk(b string) {
 	e.cb.Write([]byte(b))
 }
@@ -252,7 +283,7 @@ func (e *StructEncoder) flunk() {
 	e.instructions = append(e.instructions, instruction{static: bs, kind: kindStatic})
 }
 
-/// valueInst works out the conversion function we need for `k` and creates an instruction to write it to the buffer
+// valueInst works out the conversion function we need for `k` and creates an instruction to write it to the buffer
 func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer, *Buffer))) {
 
 	switch k {
@@ -446,6 +477,13 @@ func (e *StructEncoder) ptrstringval(conv func(unsafe.Pointer, *Buffer)) {
 // into the working buffer. This can be useful if you're working with interface fields at runtime.
 type JSONEncoder interface {
 	JSONEncode(*Buffer)
+}
+
+// JSONMarshaler works with the `.encoder` option. Fields can implement this to encode their own JSON string straight
+// into the provided `io.Writer`. This is useful if you require the functionality of `JSONEncoder` but don't want the hard
+// dependency on `Buffer`.
+type JSONMarshaler interface {
+	EncodeJSON(io.Writer)
 }
 
 // tagOptions is the string following a comma in a struct field's "json"
