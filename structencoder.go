@@ -283,7 +283,7 @@ func (e *StructEncoder) flunk() {
 	e.instructions = append(e.instructions, instruction{static: bs, kind: kindStatic})
 }
 
-// / valueInst works out the conversion function we need for `k` and creates an instruction to write it to the buffer
+// valueInst works out the conversion function we need for `k` and creates an instruction to write it to the buffer
 func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer, *Buffer))) {
 
 	switch k {
