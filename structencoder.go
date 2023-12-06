@@ -107,8 +107,14 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 
 		/// support calling .JSONEncode(*Buffer) when the 'encoder' option is passed
 		case opts.Contains("encoder"):
+
 			// requrie explicit opt-in for JSONMarshaler implementation
-			if _, ok := reflect.PtrTo(reflect.ValueOf(e.t).Field(e.i).Type()).MethodByName("EncodeJSON"); ok {
+			t := reflect.ValueOf(e.t).Field(e.i).Type()
+			if t.Kind() != reflect.Ptr {
+				t = reflect.PtrTo(t)
+			}
+
+			if _, ok := t.MethodByName("EncodeJSON"); ok {
 				e.optInstrEncoderWriter()
 				break
 			}
