@@ -88,6 +88,7 @@ func ptrFloat64ToBuf(v unsafe.Pointer, b *Buffer) {
 	b.Bytes = strconv.AppendFloat(b.Bytes, *(*float64)(v), 'f', -1, 64)
 }
 
+//go:nocheckptr
 func ptrStringToBuf(v unsafe.Pointer, b *Buffer) {
 	b.WriteString(*(*string)(v))
 }
@@ -137,4 +138,25 @@ func ptrEscapeStringToBuf(v unsafe.Pointer, w *Buffer) {
 	if pos < len(bs) {
 		w.WriteString(bs[pos:])
 	}
+}
+
+var getIsZeroFunc = map[reflect.Kind]func(unsafe.Pointer) bool{
+	reflect.Ptr:        func(v unsafe.Pointer) bool { return *(*unsafe.Pointer)(v) == nil },
+	reflect.Slice:      func(v unsafe.Pointer) bool { return (*(*sliceHeader)(v)).Len == 0 },
+	reflect.Bool:       func(v unsafe.Pointer) bool { return !(*(*bool)(v)) },
+	reflect.String:     func(v unsafe.Pointer) bool { return *(*string)(v) == "" },
+	reflect.Int:        func(v unsafe.Pointer) bool { return *(*int)(v) == 0 },
+	reflect.Int8:       func(v unsafe.Pointer) bool { return *(*int8)(v) == 0 },
+	reflect.Int16:      func(v unsafe.Pointer) bool { return *(*int16)(v) == 0 },
+	reflect.Int32:      func(v unsafe.Pointer) bool { return *(*int32)(v) == 0 },
+	reflect.Int64:      func(v unsafe.Pointer) bool { return *(*int64)(v) == 0 },
+	reflect.Uint:       func(v unsafe.Pointer) bool { return *(*uint)(v) == 0 },
+	reflect.Uint8:      func(v unsafe.Pointer) bool { return *(*uint8)(v) == 0 },
+	reflect.Uint16:     func(v unsafe.Pointer) bool { return *(*uint16)(v) == 0 },
+	reflect.Uint32:     func(v unsafe.Pointer) bool { return *(*uint32)(v) == 0 },
+	reflect.Uint64:     func(v unsafe.Pointer) bool { return *(*uint64)(v) == 0 },
+	reflect.Float32:    func(v unsafe.Pointer) bool { return *(*float32)(v) == 0 },
+	reflect.Float64:    func(v unsafe.Pointer) bool { return *(*float64)(v) == 0 },
+	reflect.Complex64:  func(v unsafe.Pointer) bool { return *(*complex64)(v) == 0 },
+	reflect.Complex128: func(v unsafe.Pointer) bool { return *(*complex128)(v) == complex(0, 0) },
 }

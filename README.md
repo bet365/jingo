@@ -102,6 +102,7 @@ There are a couple of subtle ways you can configure the encoders.
     - `,raw`, which allows byteslice-like items (like `[]byte` and `string`) to be written to the buffer directly with no conversion, quoting or otherwise. `nil` or empty fields annotated as `raw` will output `null`. 
     - `,encoder` which instead of the standard serialization method for a given type, nominates that its `.JSONEncode(*jingo.Buffer)` function or `EncodeJSON(io.Writer)` function are invoked instead. From there you can manually write to the buffer or writer for that particular field. There are a choice of 2 interfaces you need to comply with depending on your use case, either `jingo.JSONEncoder` (which introduces a dependency on `Buffer`), or `jingo.JSONMarshaler` which allows writing directly to an `io.Writer`.
     - `,escape`, which safely escapes `"`,`\`, line feed (`\n`), carriage return (`\r`) and tab (`\t`) characters to valid JSON whilst writing. To get the same functionality when using `SliceEncoder` on its own, use `jingo.EscapeString` to initialize the encoder - e.g `NewSliceEncoder([]jingo.EscapeString)` - instead of `string` directly. There is obviously a performance impact on the write speed using this option, the benchmarks show it takes twice the time of a standard string write, so whilst it is still faster than using the stdlib, to get the best performance it is recommended to only be used when needed and only then when the escaping work can't be done up-front.
+    - `,omitempty`, this will omit the field from being output excluding structs. This has a performance impact and should be used when required. This is still more performant than the stdlib.
 
 
 ## How does it work
@@ -114,7 +115,6 @@ As part of the instruction set compilation it also generates static meta-data, i
 
 The package is designed to be performant and as such it is not 100% functionally compatible with stdlib. Specifically. 
 
-* 'Omit if empty' isn't supported, due to the nature of the instruction based approach we would be paying a performance price by including this - although it is not impossible with further effort. It isn't something that affects us as it can generally be worked around.
 * The `,string` tag option isn't supported, only strings are quoted by default - use `,stringer` instead to achieve the same results.  This may be added in future releases. 
 * Maps are currently not supported. Initial thoughts were given that this is a performance focused library it doesn't make much sense to iterate maps and would advise against doing so for performance sensitive applications - **however - maps are being added**!
 

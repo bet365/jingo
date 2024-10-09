@@ -20,10 +20,12 @@ import (
 // static, leapFun/offset, fun are mutually exclusive. we've used a concrete type for speed.
 type instruction struct {
 	static  []byte                        // provides a fast path for writing static chunks without needing an instruction function
+	sub     []instruction                 // sub instructions for omitempty
 	kind    int                           // used to switch special paths in Marshal, like string fast path
 	offset  uintptr                       // used in conjunction with leapFun
 	leapFun func(unsafe.Pointer, *Buffer) // provides a fast path for simple write & avoids wrapping function to capture offset
 	fun     func(unsafe.Pointer, *Buffer) // full instruction function for when the approaches above fail
+	isZero  func(unsafe.Pointer) bool     // isZero tests if pointer is zero
 }
 
 const (
@@ -31,6 +33,7 @@ const (
 	kindStringField
 	kindStatic
 	kindInt
+	KindOmit
 )
 
 // iface describes the memory footprint of interface{}
@@ -47,6 +50,7 @@ type StructEncoder struct {
 	i            int                 // iter
 	cb           Buffer              // side buffer for static data
 	cpos         int                 // side buffer position
+	o            bool                // field is omitempty
 }
 
 // Marshal executes the instructions for a given type and writes the resulting
@@ -56,7 +60,6 @@ func (e *StructEncoder) Marshal(s interface{}, w *Buffer) {
 	p := (*(*iface)(unsafe.Pointer(&s))).Data
 
 	for i := 0; i < len(e.instructions); i++ {
-
 		if e.instructions[i].kind == kindStatic { // static data fast path
 			w.Write(e.instructions[i].static)
 			continue
@@ -68,6 +71,36 @@ func (e *StructEncoder) Marshal(s interface{}, w *Buffer) {
 			continue
 		} else if e.instructions[i].leapFun != nil { // simple 'conv' function fast path
 			e.instructions[i].leapFun(unsafe.Pointer(uintptr(p)+e.instructions[i].offset), w)
+			continue
+		} else if e.instructions[i].kind == KindOmit {
+			// this is managed by omitFlunk
+			w.Write(e.instructions[i].static)
+			if e.instructions[i].isZero(unsafe.Pointer(uintptr(p) + e.instructions[i].offset)) {
+				// this is managed by setupLastField
+				if e.instructions[i].fun != nil {
+					e.instructions[i].fun(nil, w)
+				}
+				continue
+			}
+
+			for si := 0; si < len(e.instructions[i].sub); si++ {
+				if e.instructions[i].sub[si].kind == kindStatic { // static data fast path
+					w.Write(e.instructions[i].sub[si].static)
+					continue
+				} else if e.instructions[i].sub[si].kind == kindStringField { // string fields fast path, allows inlining of whole write
+					ptrStringToBuf(unsafe.Pointer(uintptr(p)+e.instructions[i].sub[si].offset), w)
+					continue
+				} else if e.instructions[i].sub[si].kind == kindInt { // int fields fast path, allows inlining of whole write
+					ptrIntToBuf(unsafe.Pointer(uintptr(p)+e.instructions[i].sub[si].offset), w)
+					continue
+				} else if e.instructions[i].sub[si].leapFun != nil { // simple 'conv' function fast path
+					e.instructions[i].sub[si].leapFun(unsafe.Pointer(uintptr(p)+e.instructions[i].sub[si].offset), w)
+					continue
+				}
+
+				e.instructions[i].sub[si].fun(p, w) // all other instruction types
+			}
+
 			continue
 		}
 
@@ -83,7 +116,6 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 
 	e.chunk("{")
 
-	emit := 0 // track number of fields we emit
 	// pass over each field in the struct to build up our instruction set for each
 	for e.i = 0; e.i < tt.NumField(); e.i++ {
 		e.f = tt.Field(e.i)
@@ -92,12 +124,13 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 		if tag == "" {
 			continue
 		}
-		emit++
 
-		// write the key
-		if emit > 1 {
-			e.chunk(",")
+		e.o = false
+		e.o = opts.Contains("omitempty") && e.f.Type.Kind() != reflect.Struct
+		if e.o {
+			e.omitFlunk()
 		}
+
 		e.chunk(`"` + tag + `":`)
 
 		switch {
@@ -147,16 +180,71 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 			// create an instruction which reads from a standard field
 			e.valueInst(e.f.Type.Kind(), e.val)
 		}
+
+		e.chunk(",")
+
+		// if omitempty we need to flunk so just this field is omitted
+		if e.o {
+			e.flunk()
+		}
 	}
 
+	e.setupLastField() // for comma handling
 	e.chunk("}")
+
 	e.flunk()
 
 	return e
 }
 
-func (e *StructEncoder) appendInstructionFun(fun func(unsafe.Pointer, *Buffer)) {
-	e.instructions = append(e.instructions, instruction{fun: fun})
+// setupLastField manually removes the comma from the last field.
+//
+// If it is an omit instruction we know to remove the last byte always.
+// We then add a function to the general fun field (that never gets used) to reset the comma if this field is omitted
+//
+// If it's not omitempty we check if the last item is a comma as it could be a '{' and remove the comma.
+func (e *StructEncoder) setupLastField() {
+	if e.o {
+		instr := &e.instructions[len(e.instructions)-1]
+		subInstr := &instr.sub[len(instr.sub)-1]
+		subInstr.static = subInstr.static[:len(subInstr.static)-1]
+
+		instr.fun = func(_ unsafe.Pointer, w *Buffer) {
+			if w.Bytes[len(w.Bytes)-1] == ',' { // remove any superfluous "," in the event the last field was omitted
+				w.Bytes = w.Bytes[:len(w.Bytes)-1]
+			}
+		}
+		e.o = false
+
+	} else if e.cb.Bytes[len(e.cb.Bytes)-1] == ',' {
+		// it doesn't matter if this makes the slice empty as this is before the flunk
+		e.cb.Bytes = e.cb.Bytes[:len(e.cb.Bytes)-1]
+	}
+}
+
+// appendInstruction is used to add an instruction to the decoder, we use this to ensure that omitEmpty is being set regardless of what instruction type is being passed through.
+// If it is not an omit empty, it just appends it into the instructions list
+//
+// This also manages the omitempty functions on the parent instruction that allows us to perform isZero checks.
+func (e *StructEncoder) appendInstruction(instr instruction) {
+	// if this is an omit field we append to the current instruction instead of appending a new one for the isZero check
+	if e.o {
+		omitInstr := &e.instructions[len(e.instructions)-1]
+		// if it is not a static kind, we know to also append the isZero check and offset
+		if instr.kind != kindStatic {
+			omitInstr.isZero = getIsZeroFunc[e.f.Type.Kind()]
+			omitInstr.offset = instr.offset
+		}
+
+		omitInstr.sub = append(omitInstr.sub, instr)
+		return
+	}
+
+	e.instructions = append(e.instructions, instr)
+}
+
+func (e *StructEncoder) appendInstructionFun(fun func(unsafe.Pointer, *Buffer), offset uintptr) {
+	e.appendInstruction(instruction{fun: fun, offset: offset})
 }
 
 func (e *StructEncoder) optInstrStringer() {
@@ -218,6 +306,7 @@ func (e *StructEncoder) optInstrEncoderWriter() {
 			w.Write(null)
 			return
 		}
+
 		e.EncodeJSON(w)
 	}
 
@@ -252,10 +341,11 @@ func (e *StructEncoder) optInstrEscape() {
 		/// create an escape string encoder internally instead of mirroring the struct, so people only need to pass the ,escape opt instead
 		enc := NewSliceEncoder([]EscapeString{})
 		f := e.f
+
 		e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
 			enc.Marshal(em, w)
-		})
+		}, f.Offset)
 		return
 	}
 
@@ -286,7 +376,22 @@ func (e *StructEncoder) flunk() {
 		return
 	}
 
-	e.instructions = append(e.instructions, instruction{static: bs, kind: kindStatic})
+	e.appendInstruction(instruction{static: bs, kind: kindStatic})
+}
+
+// omitFlunk flushes whatever chunk data we've got buffered into a single instruction and exits/enters into omitMarshal
+// this is to ensure that everything that needs to be written out is already complete before the isZero check
+func (e *StructEncoder) omitFlunk() {
+	b := e.cb.Bytes
+	bs := b[e.cpos:]
+	e.cpos = len(b)
+
+	if len(bs) == 0 {
+		e.instructions = append(e.instructions, instruction{kind: KindOmit})
+		return
+	}
+
+	e.instructions = append(e.instructions, instruction{static: bs, kind: KindOmit})
 }
 
 // valueInst works out the conversion function we need for `k` and creates an instruction to write it to the buffer
@@ -302,7 +407,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 			return
 		}
 		e.flunk()
-		e.instructions = append(e.instructions, instruction{offset: e.f.Offset, kind: kindInt})
+		e.appendInstruction(instruction{offset: e.f.Offset, kind: kindInt})
 
 	case reflect.Bool,
 		reflect.Int8,
@@ -343,7 +448,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 			i := i
 			e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
 				conv(unsafe.Pointer(uintptr(v)+f.Offset+(uintptr(i)*offset)), w)
-			})
+			}, f.Offset)
 		}
 
 		e.chunk("]")
@@ -355,9 +460,8 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		enc := NewSliceEncoder(reflect.ValueOf(e.t).Field(e.i).Interface())
 		f := e.f
 		e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
-			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
-			enc.Marshal(em, w)
-		})
+			enc.Marshal(unsafe.Pointer(uintptr(v)+f.Offset), w)
+		}, f.Offset)
 
 	case reflect.String:
 
@@ -372,7 +476,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 
 		/// fast path for strings
 		e.flunk() // flush any chunk data we've buffered
-		e.instructions = append(e.instructions, instruction{offset: e.f.Offset, kind: kindStringField})
+		e.appendInstruction(instruction{offset: e.f.Offset, kind: kindStringField})
 		e.chunk(`"`)
 
 	case reflect.Struct:
@@ -400,8 +504,9 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 					w.Write(null)
 					return
 				}
+
 				enc.Marshal(em, w)
-			})
+			}, f.Offset)
 			return
 		}
 
@@ -410,9 +515,8 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 		// now create another instruction which calls marshal on the struct, passing our writer
 		f := e.f
 		e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
-			var em interface{} = unsafe.Pointer(uintptr(v) + f.Offset)
-			enc.Marshal(em, w)
-		})
+			enc.Marshal(unsafe.Pointer(uintptr(v)+f.Offset), w)
+		}, f.Offset)
 		return
 
 	case reflect.Invalid,
@@ -433,7 +537,7 @@ func (e *StructEncoder) valueInst(k reflect.Kind, instr func(func(unsafe.Pointer
 func (e *StructEncoder) val(conv func(unsafe.Pointer, *Buffer)) {
 
 	e.flunk() // flush any chunk data we've buffered
-	e.instructions = append(e.instructions, instruction{leapFun: conv, offset: e.f.Offset})
+	e.appendInstruction(instruction{leapFun: conv, offset: e.f.Offset})
 }
 
 // ptrval creates an instruction to read from a pointer field we're marshaling
@@ -446,14 +550,13 @@ func (e *StructEncoder) ptrval(conv func(unsafe.Pointer, *Buffer)) {
 
 	f := e.f
 	e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
-
-		p := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset)))
+		p := *(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset))
 		if p == unsafe.Pointer(nil) {
 			w.Write(null)
 			return
 		}
 		conv(p, w)
-	})
+	}, f.Offset)
 }
 
 // ptrstringval is essentially the same as ptrval but quotes strings if not nil
@@ -465,8 +568,7 @@ func (e *StructEncoder) ptrstringval(conv func(unsafe.Pointer, *Buffer)) {
 
 	f := e.f
 	e.appendInstructionFun(func(v unsafe.Pointer, w *Buffer) {
-
-		p := unsafe.Pointer(*(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset)))
+		p := *(*unsafe.Pointer)(unsafe.Pointer(uintptr(v) + f.Offset))
 		if p == unsafe.Pointer(nil) {
 			w.Write(null)
 			return
@@ -476,7 +578,7 @@ func (e *StructEncoder) ptrstringval(conv func(unsafe.Pointer, *Buffer)) {
 		w.WriteByte('"')
 		conv(p, w)
 		w.WriteByte('"')
-	})
+	}, f.Offset)
 }
 
 // JSONEncoder works with the `.encoder` option. Fields can implement this to encode their own JSON string straight
