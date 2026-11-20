@@ -52,7 +52,7 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 		e.structInstr()
 
 	case reflect.String:
-		e.stringInstr(ptrStringToBuf)
+		e.flatStringInstr()
 
 	case reflect.Ptr:
 
@@ -74,7 +74,7 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 			e.ptrStrctInstr()
 
 		case reflect.String:
-			e.ptrStringInstr(ptrStringToBuf)
+			e.flatPtrStringInstr()
 
 		default:
 			e.ptrOtherInstr()
@@ -160,6 +160,74 @@ func (e *SliceEncoder) stringInstr(conv func(unsafe.Pointer, *Buffer)) {
 		}
 
 		w.WriteByte(']')
+	}
+}
+
+// flatStringInstr writes a []string with one capacity check for the whole slice.
+func (e *SliceEncoder) flatStringInstr() {
+	e.instruction = func(v unsafe.Pointer, w *Buffer) {
+		sl := *(*sliceHeader)(v)
+		need := 2 // '[' and ']'
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			need += 3 + len(*(*string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))) // quotes and a comma, one comma spare
+		}
+		bs := grow(w.Bytes, need)
+		n := len(bs)
+		bs = bs[:n+need]
+		bs[n] = '['
+		n++
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			if i > zero {
+				bs[n] = ','
+				n++
+			}
+			bs[n] = '"'
+			n++
+			n += copy(bs[n:], *(*string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))))
+			bs[n] = '"'
+			n++
+		}
+		bs[n] = ']'
+		w.Bytes = bs[:n+1] // keep the ']' at n
+	}
+}
+
+// flatPtrStringInstr writes a []*string with one capacity check for the whole slice.
+func (e *SliceEncoder) flatPtrStringInstr() {
+	e.instruction = func(v unsafe.Pointer, w *Buffer) {
+		sl := *(*sliceHeader)(v)
+		need := 2 // '[' and ']'
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			s := *(**string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))
+			if s == nil {
+				need += 1 + len(null) // a comma and null
+				continue
+			}
+			need += 3 + len(*s) // quotes and a comma, one comma spare
+		}
+		bs := grow(w.Bytes, need)
+		n := len(bs)
+		bs = bs[:n+need]
+		bs[n] = '['
+		n++
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			if i > zero {
+				bs[n] = ','
+				n++
+			}
+			s := *(**string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))
+			if s == nil {
+				n += copy(bs[n:], null)
+				continue
+			}
+			bs[n] = '"'
+			n++
+			n += copy(bs[n:], *s)
+			bs[n] = '"'
+			n++
+		}
+		bs[n] = ']'
+		w.Bytes = bs[:n+1] // keep the ']' at n
 	}
 }
 

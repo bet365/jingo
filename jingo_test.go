@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
+	"math/rand"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -487,6 +490,215 @@ func TestSliceEncoder(t *testing.T) {
 			}
 
 		})
+	}
+}
+
+// expectMatchesStdLib checks jingo writes the same document as encoding/json for v.
+func expectMatchesStdLib(t *testing.T, enc *StructEncoder, v interface{}) {
+	t.Helper()
+	want, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := NewBufferFromPool()
+	defer buf.ReturnToPool()
+	enc.Marshal(v, buf)
+	if buf.String() != string(want) {
+		t.Errorf("%T\nwant JSON: %s\n got JSON: %s", v, want, buf.String())
+	}
+}
+
+func Test_SmallPayload(t *testing.T) {
+	expectMatchesStdLib(t, NewStructEncoder(SmallPayload{}), smallPayload)
+}
+
+func Test_LargePayload(t *testing.T) {
+	expectMatchesStdLib(t, NewStructEncoder(LargePayload{}), largePayload)
+}
+
+type flatStruct struct {
+	A string `json:"a"`
+	B int    `json:"b"`
+	C string `json:"c"`
+}
+
+type fastPathStruct struct {
+	Name  string        `json:"name"`
+	N     int           `json:"n"`
+	Flat  []flatStruct  `json:"flat"`
+	Ptrs  []*flatStruct `json:"ptrs"`
+	Strs  []string      `json:"strs"`
+	PStrs []*string     `json:"pstrs"`
+	Inner flatStruct    `json:"inner"`
+	Tail  string        `json:"tail"`
+	F     float64       `json:"f"`
+	TailN int           `json:"tailN"`
+}
+
+// strings, ints and statics take the fast paths in Marshal, and slices of strings reserve once for the
+// whole slice. jingo writes nil slices as [] where encoding/json writes null, so every slice here is
+// non-nil.
+func Test_FastPaths(t *testing.T) {
+	long := strings.Repeat("x", 5000) // forces growth part way through from an empty buffer
+	s := "p"
+
+	empty := fastPathStruct{Flat: []flatStruct{}, Ptrs: []*flatStruct{}, Strs: []string{}, PStrs: []*string{}}
+	big := empty
+	big.Name, big.N, big.TailN, big.Tail = long, math.MinInt64, math.MaxInt64, long
+
+	enc := NewStructEncoder(fastPathStruct{})
+	for _, v := range []fastPathStruct{empty, big, {
+		Name: "n", N: -7, F: 1.5,
+		Flat:  []flatStruct{{A: "a", B: 1, C: "c"}, {A: long, B: -99, C: ""}},
+		Ptrs:  []*flatStruct{nil, {A: "x", B: 2}, nil},
+		Strs:  []string{"", "one", long},
+		PStrs: []*string{nil, &s, nil},
+		Inner: flatStruct{A: "in", B: 42, C: "ner"},
+	}} {
+		v := v
+		expectMatchesStdLib(t, enc, &v)
+	}
+}
+
+type resumes struct {
+	A string  `json:"a"`
+	E encode0 `json:"e,encoder"`
+	B int     `json:"b"`
+	F float64 `json:"f"`
+	C string  `json:"c"`
+}
+
+// the fast paths pick the buffer back up after a custom encoder and after a leapFun instruction
+func Test_FastPathsAroundOtherInstructions(t *testing.T) {
+	wantJSON := `{"a":"x","e":7,"b":12,"f":1.5,"c":"y"}`
+
+	buf := NewBufferFromPool()
+	NewStructEncoder(resumes{}).Marshal(&resumes{A: "x", E: encode0{val: '7'}, B: 12, F: 1.5, C: "y"}, buf)
+
+	if resultJSON := buf.String(); resultJSON != wantJSON {
+		t.Errorf("want JSON: %s\n got JSON: %s", wantJSON, resultJSON)
+	}
+}
+
+type notFlat struct {
+	Name  string       `json:"name"`
+	Inner flatStruct   `json:"inner"`
+	Many  []flatStruct `json:"many"`
+	F     float64      `json:"f"`
+}
+
+type notFlatOuter struct {
+	Items []notFlat  `json:"items"`
+	Ptrs  []*notFlat `json:"ptrs"`
+}
+
+// slices of fast-path-only structs inside a slice of structs that aren't
+func Test_FlatInsideNotFlat(t *testing.T) {
+	f := flatStruct{A: "a", B: 1, C: "c"}
+	v := notFlatOuter{
+		Items: []notFlat{{Name: "n", Inner: f, Many: []flatStruct{f, f}, F: 2}, {Many: []flatStruct{}}},
+		Ptrs:  []*notFlat{nil, {Name: "p", Many: []flatStruct{f}}, nil},
+	}
+	expectMatchesStdLib(t, NewStructEncoder(notFlatOuter{}), &v)
+}
+
+// recursion is only supported through a pointer field on a struct with no slice fields: NewStructEncoder
+// spots it by comparing values, which panics for a struct holding a slice
+type recursive struct {
+	Name string     `json:"name"`
+	N    int        `json:"n"`
+	Next *recursive `json:"next"`
+	Tail string     `json:"tail"`
+}
+
+// fast-path fields before and after the recursive call at every level
+func Test_RecursionThroughFastPaths(t *testing.T) {
+	v := &recursive{Name: "leaf", N: -1, Tail: "t"}
+	for i := 0; i < 50; i++ {
+		v = &recursive{Name: fmt.Sprint("n", i), N: i * 1000, Next: v, Tail: "tail"}
+	}
+	expectMatchesStdLib(t, NewStructEncoder(recursive{}), v)
+}
+
+var nestedLeafTypes = []reflect.Type{
+	reflect.TypeOf(0),
+	reflect.TypeOf(""),
+	reflect.TypeOf(false),
+	reflect.TypeOf(int64(0)),
+	reflect.TypeOf(uint16(0)),
+	reflect.TypeOf((*string)(nil)),
+	reflect.TypeOf([]string(nil)),
+	reflect.TypeOf([]*string(nil)),
+	reflect.TypeOf([]int(nil)),
+}
+
+// randomStructType returns a struct type whose fields are leaves or, while depth remains, another random
+// struct nested directly, by pointer, in a slice, in a slice of pointers or in a slice of slices.
+func randomStructType(r *rand.Rand, depth int) reflect.Type {
+	fields := make([]reflect.StructField, 1+r.Intn(6))
+	for i := range fields {
+		t := nestedLeafTypes[r.Intn(len(nestedLeafTypes))]
+		if depth > 0 && r.Intn(3) == 0 {
+			c := randomStructType(r, depth-1)
+			t = []reflect.Type{c, reflect.PtrTo(c), reflect.SliceOf(c), reflect.SliceOf(reflect.PtrTo(c)), reflect.SliceOf(reflect.SliceOf(c))}[r.Intn(5)]
+		}
+		fields[i] = reflect.StructField{Name: fmt.Sprintf("F%d", i), Type: t, Tag: reflect.StructTag(fmt.Sprintf(`json:"f%d"`, i))}
+	}
+	return reflect.StructOf(fields)
+}
+
+const plainChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_."
+
+// randomFill sets v to random values that jingo and encoding/json encode identically: no floats, no nil
+// slices and no characters that need escaping.
+func randomFill(r *rand.Rand, v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Int, reflect.Int64:
+		v.SetInt([]int64{math.MinInt64, math.MaxInt64, int64(r.Intn(10)), r.Int63() - r.Int63()}[r.Intn(4)])
+	case reflect.Uint16:
+		v.SetUint(uint64(r.Intn(math.MaxUint16 + 1)))
+	case reflect.Bool:
+		v.SetBool(r.Intn(2) == 0)
+	case reflect.String:
+		b := make([]byte, r.Intn(100))
+		for i := range b {
+			b[i] = plainChars[r.Intn(len(plainChars))]
+		}
+		v.SetString(string(b))
+	case reflect.Ptr:
+		if r.Intn(3) == 0 {
+			return // nil
+		}
+		p := reflect.New(v.Type().Elem())
+		randomFill(r, p.Elem())
+		v.Set(p)
+	case reflect.Slice:
+		s := reflect.MakeSlice(v.Type(), r.Intn(4), 3)
+		for i := 0; i < s.Len(); i++ {
+			randomFill(r, s.Index(i))
+		}
+		v.Set(s)
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			randomFill(r, v.Field(i))
+		}
+	default:
+		panic("randomFill: " + v.Type().String())
+	}
+}
+
+// random nested shapes, each filled with random values and checked against encoding/json. the seeds are
+// fixed so a failure always reproduces.
+func Test_RandomNestedShapes(t *testing.T) {
+	for seed := int64(0); seed < 200; seed++ {
+		r := rand.New(rand.NewSource(seed))
+		typ := randomStructType(r, 3)
+		enc := NewStructEncoder(reflect.New(typ).Elem().Interface())
+		for i := 0; i < 20; i++ {
+			v := reflect.New(typ)
+			randomFill(r, v.Elem())
+			expectMatchesStdLib(t, enc, v.Interface())
+		}
 	}
 }
 
