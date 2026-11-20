@@ -238,6 +238,16 @@ func (e *StructEncoder) optInstrRaw() {
 		w.WriteString(s)
 	}
 
+	// raw reads the field as a string header, which only strings and byte slices start with; reading
+	// any other type that way runs past the end of the field
+	k := e.f.Type.Kind()
+	if k == reflect.Ptr {
+		k = e.f.Type.Elem().Kind()
+	}
+	if k != reflect.String && k != reflect.Slice {
+		conv = func(v unsafe.Pointer, w *Buffer) { w.Write(null) }
+	}
+
 	if e.f.Type.Kind() == reflect.Ptr {
 		e.ptrval(conv)
 	} else {
