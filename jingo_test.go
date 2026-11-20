@@ -151,7 +151,7 @@ func Test_NilStruct(t *testing.T) {
 
 	resultJSON := buf.String()
 	if resultJSON != wantJSON {
-		t.Errorf("Test_NilStruct Failed: want JSON: " + wantJSON + " got JSON:" + resultJSON)
+		t.Error("Test_NilStruct Failed: want JSON: " + wantJSON + " got JSON:" + resultJSON)
 	}
 }
 
@@ -178,12 +178,12 @@ func Test_StructWithEscapes(t *testing.T) {
 
 	// Ensure JSON is valid.
 	if !json.Valid([]byte(resultJSON)) {
-		t.Errorf("Not valid JSON:" + resultJSON)
+		t.Error("Not valid JSON:" + resultJSON)
 	}
 
 	// Compare result
 	if resultJSON != wantJSON {
-		t.Errorf("Test_StructWithEscapes Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+		t.Error("Test_StructWithEscapes Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
 	}
 
 	andBackAgain := StructWithEscapes{}
@@ -220,7 +220,7 @@ func Test_StructWithRecursion(t *testing.T) {
 
 	resultJSON := buf.String()
 	if resultJSON != wantJSON {
-		t.Errorf("Test_StructWithRecursion Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+		t.Error("Test_StructWithRecursion Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
 	}
 }
 
@@ -244,7 +244,7 @@ func Test_Unicode(t *testing.T) {
 	enc.Marshal(&ub, buf)
 	resultJSON := buf.String()
 	if resultJSON != wantJSON {
-		t.Errorf("Test_UnicodeEncode Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+		t.Error("Test_UnicodeEncode Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
 	}
 
 }
@@ -313,7 +313,7 @@ func Test_UnicodeLarge(t *testing.T) {
 	}
 
 	if resultJSON != wantJSON {
-		t.Errorf("Test_UnicodeEncode Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+		t.Error("Test_UnicodeEncode Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
 	}
 
 }
@@ -390,7 +390,7 @@ func Test_Time(t *testing.T) {
 	enc.Marshal(&to, buf)
 	resultJSON := buf.String()
 	if resultJSON != wantJSON {
-		t.Errorf("Test_Time Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
+		t.Error("Test_Time Failed: want JSON:" + wantJSON + " got JSON:" + resultJSON)
 	}
 }
 
