@@ -52,7 +52,7 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 		e.structInstr()
 
 	case reflect.String:
-		e.stringInstr(ptrStringToBuf)
+		e.flatStringInstr()
 
 	case reflect.Ptr:
 
@@ -74,7 +74,7 @@ func NewSliceEncoder(t interface{}) *SliceEncoder {
 			e.ptrStrctInstr()
 
 		case reflect.String:
-			e.ptrStringInstr(ptrStringToBuf)
+			e.flatPtrStringInstr()
 
 		default:
 			e.ptrOtherInstr()
@@ -160,6 +160,46 @@ func (e *SliceEncoder) stringInstr(conv func(unsafe.Pointer, *Buffer)) {
 		}
 
 		w.WriteByte(']')
+	}
+}
+
+// flatStringInstr writes a []string by appending to a local copy of the slice header, so it isn't stored
+// to and loaded back from w for every element.
+func (e *SliceEncoder) flatStringInstr() {
+	e.instruction = func(v unsafe.Pointer, w *Buffer) {
+		sl := *(*sliceHeader)(v)
+		bs := append(w.Bytes, '[')
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			if i > zero {
+				bs = append(bs, ',')
+			}
+			bs = append(bs, '"')
+			bs = append(bs, *(*string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))...)
+			bs = append(bs, '"')
+		}
+		w.Bytes = append(bs, ']')
+	}
+}
+
+// flatPtrStringInstr is flatStringInstr for a []*string.
+func (e *SliceEncoder) flatPtrStringInstr() {
+	e.instruction = func(v unsafe.Pointer, w *Buffer) {
+		sl := *(*sliceHeader)(v)
+		bs := append(w.Bytes, '[')
+		for i := uintptr(0); i < uintptr(sl.Len); i++ {
+			if i > zero {
+				bs = append(bs, ',')
+			}
+			s := *(**string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))
+			if s == nil {
+				bs = append(bs, null...)
+				continue
+			}
+			bs = append(bs, '"')
+			bs = append(bs, *s...)
+			bs = append(bs, '"')
+		}
+		w.Bytes = append(bs, ']')
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -55,24 +56,32 @@ func (e *StructEncoder) Marshal(s interface{}, w *Buffer) {
 
 	p := (*(*iface)(unsafe.Pointer(&s))).Data
 
+	// the fast paths append to a local copy of the slice header; going through w would store it to the heap and
+	// load it back on every write, a second round trip on the path to the next write plus a write barrier check
+	bs := w.Bytes
 	for i := 0; i < len(e.instructions); i++ {
 
 		if e.instructions[i].kind == kindStatic { // static data fast path
-			w.Write(e.instructions[i].static)
+			bs = append(bs, e.instructions[i].static...)
 			continue
 		} else if e.instructions[i].kind == kindStringField { // string fields fast path, allows inlining of whole write
-			ptrStringToBuf(unsafe.Pointer(uintptr(p)+e.instructions[i].offset), w)
+			bs = append(bs, *(*string)(unsafe.Pointer(uintptr(p) + e.instructions[i].offset))...)
 			continue
 		} else if e.instructions[i].kind == kindInt { // int fields fast path, allows inlining of whole write
-			ptrIntToBuf(unsafe.Pointer(uintptr(p)+e.instructions[i].offset), w)
-			continue
-		} else if e.instructions[i].leapFun != nil { // simple 'conv' function fast path
-			e.instructions[i].leapFun(unsafe.Pointer(uintptr(p)+e.instructions[i].offset), w)
+			bs = strconv.AppendInt(bs, int64(*(*int)(unsafe.Pointer(uintptr(p) + e.instructions[i].offset))), 10)
 			continue
 		}
 
-		e.instructions[i].fun(p, w) // all other instruction types
+		// hand the header back for instructions that write through w
+		w.Bytes = bs
+		if e.instructions[i].leapFun != nil { // simple 'conv' function fast path
+			e.instructions[i].leapFun(unsafe.Pointer(uintptr(p)+e.instructions[i].offset), w)
+		} else {
+			e.instructions[i].fun(p, w) // all other instruction types
+		}
+		bs = w.Bytes
 	}
+	w.Bytes = bs
 }
 
 // NewStructEncoder compiles a set of instructions for marhsaling a struct shape to a JSON document.
@@ -236,6 +245,16 @@ func (e *StructEncoder) optInstrRaw() {
 			return
 		}
 		w.WriteString(s)
+	}
+
+	// raw reads the field as a string header, which only strings and byte slices start with; reading
+	// any other type that way runs past the end of the field
+	k := e.f.Type.Kind()
+	if k == reflect.Ptr {
+		k = e.f.Type.Elem().Kind()
+	}
+	if k != reflect.String && k != reflect.Slice {
+		conv = func(v unsafe.Pointer, w *Buffer) { w.Write(null) }
 	}
 
 	if e.f.Type.Kind() == reflect.Ptr {
