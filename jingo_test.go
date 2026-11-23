@@ -630,6 +630,15 @@ var nestedLeafTypes = []reflect.Type{
 	reflect.TypeOf([]string(nil)),
 	reflect.TypeOf([]*string(nil)),
 	reflect.TypeOf([]int(nil)),
+	reflect.TypeOf(int8(0)),
+	reflect.TypeOf(int16(0)),
+	reflect.TypeOf(int32(0)),
+	reflect.TypeOf(uint(0)),
+	reflect.TypeOf(uint8(0)),
+	reflect.TypeOf(uint32(0)),
+	reflect.TypeOf(uint64(0)),
+	reflect.TypeOf(time.Time{}),
+	reflect.TypeOf((*time.Time)(nil)),
 }
 
 // randomStructType returns a struct type whose fields are leaves or, while depth remains, another random
@@ -652,11 +661,17 @@ const plainChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567
 // randomFill sets v to random values that jingo and encoding/json encode identically: no floats, no nil
 // slices and no characters that need escaping.
 func randomFill(r *rand.Rand, v reflect.Value) {
+	if v.Type() == reflect.TypeOf(time.Time{}) {
+		v.Set(reflect.ValueOf(time.Unix(r.Int63n(4e9), r.Int63n(1e9)).UTC()))
+		return
+	}
 	switch v.Kind() {
-	case reflect.Int, reflect.Int64:
-		v.SetInt([]int64{math.MinInt64, math.MaxInt64, int64(r.Intn(10)), r.Int63() - r.Int63()}[r.Intn(4)])
-	case reflect.Uint16:
-		v.SetUint(uint64(r.Intn(math.MaxUint16 + 1)))
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// shifting keeps the sign, so the extremes and everything between fit the field's width
+		shift := 64 - v.Type().Bits()
+		v.SetInt([]int64{math.MinInt64, math.MaxInt64, int64(r.Intn(10)), r.Int63() - r.Int63()}[r.Intn(4)] >> shift)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		v.SetUint([]uint64{math.MaxUint64, uint64(r.Intn(10)), r.Uint64()}[r.Intn(3)] >> (64 - v.Type().Bits()))
 	case reflect.Bool:
 		v.SetBool(r.Intn(2) == 0)
 	case reflect.String:
