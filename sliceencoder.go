@@ -163,71 +163,43 @@ func (e *SliceEncoder) stringInstr(conv func(unsafe.Pointer, *Buffer)) {
 	}
 }
 
-// flatStringInstr writes a []string with one capacity check for the whole slice.
+// flatStringInstr writes a []string by appending to a local copy of the slice header, so it isn't stored
+// to and loaded back from w for every element.
 func (e *SliceEncoder) flatStringInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		sl := *(*sliceHeader)(v)
-		need := 2 // '[' and ']'
-		for i := uintptr(0); i < uintptr(sl.Len); i++ {
-			need += 3 + len(*(*string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))) // quotes and a comma, one comma spare
-		}
-		bs := grow(w.Bytes, need)
-		n := len(bs)
-		bs = bs[:n+need]
-		bs[n] = '['
-		n++
+		bs := append(w.Bytes, '[')
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
-				bs[n] = ','
-				n++
+				bs = append(bs, ',')
 			}
-			bs[n] = '"'
-			n++
-			n += copy(bs[n:], *(*string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset))))
-			bs[n] = '"'
-			n++
+			bs = append(bs, '"')
+			bs = append(bs, *(*string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))...)
+			bs = append(bs, '"')
 		}
-		bs[n] = ']'
-		w.Bytes = bs[:n+1] // keep the ']' at n
+		w.Bytes = append(bs, ']')
 	}
 }
 
-// flatPtrStringInstr writes a []*string with one capacity check for the whole slice.
+// flatPtrStringInstr is flatStringInstr for a []*string.
 func (e *SliceEncoder) flatPtrStringInstr() {
 	e.instruction = func(v unsafe.Pointer, w *Buffer) {
 		sl := *(*sliceHeader)(v)
-		need := 2 // '[' and ']'
-		for i := uintptr(0); i < uintptr(sl.Len); i++ {
-			s := *(**string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))
-			if s == nil {
-				need += 1 + len(null) // a comma and null
-				continue
-			}
-			need += 3 + len(*s) // quotes and a comma, one comma spare
-		}
-		bs := grow(w.Bytes, need)
-		n := len(bs)
-		bs = bs[:n+need]
-		bs[n] = '['
-		n++
+		bs := append(w.Bytes, '[')
 		for i := uintptr(0); i < uintptr(sl.Len); i++ {
 			if i > zero {
-				bs[n] = ','
-				n++
+				bs = append(bs, ',')
 			}
 			s := *(**string)(unsafe.Pointer(uintptr(sl.Data) + (i * e.offset)))
 			if s == nil {
-				n += copy(bs[n:], null)
+				bs = append(bs, null...)
 				continue
 			}
-			bs[n] = '"'
-			n++
-			n += copy(bs[n:], *s)
-			bs[n] = '"'
-			n++
+			bs = append(bs, '"')
+			bs = append(bs, *s...)
+			bs = append(bs, '"')
 		}
-		bs[n] = ']'
-		w.Bytes = bs[:n+1] // keep the ']' at n
+		w.Bytes = append(bs, ']')
 	}
 }
 
